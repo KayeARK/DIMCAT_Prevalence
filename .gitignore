@@ -1,6 +1,6 @@
 # Large data files
 #*.csv
-*.xlsx
+#*.xlsx
 *.xls
 *.pdf
 *.png
