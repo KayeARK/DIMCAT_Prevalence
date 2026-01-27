@@ -1,7 +1,7 @@
 # Large data files
 #*.csv
 #*.xlsx
-#*.xls
+*.xls
 *.pdf
 *.png
 *.jpg
