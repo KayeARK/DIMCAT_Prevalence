@@ -59,3 +59,7 @@ Thumbs.db
 *.zip
 *.tar.gz
 *.rar
+
+# Analysis directories (contain large files)
+Code/AbsencePresence/
+Code/Cost effectiveness analysis/
