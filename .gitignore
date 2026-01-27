@@ -78,3 +78,11 @@ Code/Prevalence/Bovine BCT and PCR/WAIC_increase_NGA_all_PCR
 Code/Prevalence/Bovine BCT and PCR/Projections_NGA_all_PCR
 Code/Prevalence/Bovine BCT and PCR/Covariates_NGA_all_PCR
 Data/Covariates/tsetse_Harriet/
+
+## Continental Atlas data to be ignored
+Data/To_infer_sens_spec.xlsx
+Data/To_infer_sens_spec_v2.xlsx
+Data/RefinedData.xlsx
+Data/240708_FAO_Continental_Atlas_AT_1990_2020.xlsx
+Data/ContAtlas_v2/
+Data/ContAtlas_v3/
