@@ -32,25 +32,16 @@ This repository contains the **code infrastructure** for analyzing bovine trypan
 - `Model_selection_NGA.r` - Nigeria model selection and validation
 
 
-#### Individual Test Type Analysis
-- **`Bovine BCT/`** - BCT-specific analysis
-  - `Continental/` - Africa-wide BCT analysis
-  - `INLA_Prevalence_ETH.r`, `INLA_Prevalence_NGA.r` - Country-specific BCT models
-- **`Bovine PCR/`** - PCR-specific analysis
-  - `INLA_Prevalence.r`, `Model_selection.r` - PCR modeling
-
 ### Supporting Analysis
 
 #### Test Performance (`Code/TestSensSpec/`)
 Bayesian latent class models for test sensitivity and specificity:
 - `SensSpec.r` - Main sensitivity/specificity analysis
 - `Case_adjustment.R` - Prevalence adjustment for test performance
-- `Results.r` - Test performance results compilation
 
 #### Correlation Analysis (`Code/Correlations/`)
 Inter-species and spatial correlation analysis:
 - `Correlation.r` - Correlation analysis between species/locations
-- `Correlation continental.r` - Continental-scale correlation patterns
 
 ### Data Structure
 
@@ -59,10 +50,7 @@ Inter-species and spatial correlation analysis:
 #### Required Data Sources (Not Included)
 
 **AAT Diagnostic Data**:
-- Continental Atlas diagnostic test data (Excel format) - **Excluded for privacy reasons**
-- Contains sensitive livestock disease surveillance data
-- Source: FAO Continental Atlas of African Animal Trypanosomiasis
-- Access: Contact project collaborators or FAO for data permissions
+- Continental Atlas diagnostic test data (Excel format) - **Excluded until publication of the Atlas**
 
 **Environmental Covariates** (Large files - obtain from public sources):
 - **Climate**: WorldClim v2.1 data (auto-downloaded via `geodata::worldclim_country()`)
@@ -77,11 +65,6 @@ Inter-species and spatial correlation analysis:
 #### Package Management
 - `install_packages.R` - Install all required dependencies
 - `test_packages.R` - Test package installations and versions
-
-#### Continental Analysis
-- `Code/INLAContinental.r` - Continental-scale INLA modeling
-- `Code/INLACountry.r` - Country-scale INLA setup
-- `Code/prelim_analysis_2.R` - Preliminary data exploration
 
 ## Key Dependencies
 
@@ -108,9 +91,8 @@ source("test_packages.R")     # Verify installations
 
 Due to privacy and file size considerations, users must obtain data separately:
 
-1. **AAT Diagnostic Data** (Privacy Protected):
-   - Contact FAO or project collaborators for Continental Atlas data access
-   - Place Excel files in: `Data/ContAtlas_v2/Bovine data/` and `Data/ContAtlas_v3/`
+1. **AAT Diagnostic Data**:
+   - Upload your own AAT data
 
 2. **Environmental Covariates** (Automatically Downloaded):
    - Climate and elevation data downloaded automatically by analysis scripts
@@ -166,24 +148,6 @@ source("install_packages.R")
 # Generate risk choropleth maps
 ```
 
-## Model Structure
-
-### Response Variable
-Binomial distribution: (positive cases, total sample size)
-
-### Fixed Effects
-Standardized environmental covariates:
-- Temperature (annual mean, seasonality)
-- Precipitation (annual, seasonality)  
-- Elevation
-- Livestock density
-- Land cover
-
-### Random Effects
-Spatial random field using SPDE approach with Matérn covariance
-
-### Prior Specification
-PC (Penalized Complexity) priors for hyperparameters
 
 ## Key Outputs
 
@@ -271,7 +235,3 @@ This repository contains **analysis code only**. Raw data files are excluded for
 ### Memory Considerations
 - INLA models with fine spatial meshes can be memory intensive
 - Consider computational resources for continental-scale analysis
-
-## License
-
-Please refer to the project license for usage terms.
