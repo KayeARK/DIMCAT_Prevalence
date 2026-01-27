@@ -1,0 +1,61 @@
+# Large data files
+*.csv
+*.xlsx
+*.xls
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.tif
+*.tiff
+*.rds
+*.RData
+*.Rdata
+
+# Presentations and documentation
+*.pptx
+*.ppt
+*.docx
+*.doc
+
+# Results and outputs
+Results/
+results/
+output/
+outputs/
+plots/
+figures/
+
+# R specific
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*~
+*.tmp
+*.temp
+
+# Log files
+*.log
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
