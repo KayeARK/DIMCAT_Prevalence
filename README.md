@@ -55,10 +55,10 @@ Inter-species and spatial correlation analysis:
 **Environmental Covariates** (Large files - obtain from public sources):
 - **Climate**: WorldClim v2.1 data (auto-downloaded via `geodata::worldclim_country()`)
 - **Elevation**: SRTM 30s resolution (via `geodata::elevation_30s()`)
-- **Livestock**: GLW4 livestock density rasters (https://www.fao.org/livestock/livestock-systems-sector/global-datasets/gridded-livestock-of-the-world/en/)
+- **Livestock**: GLW4 livestock density rasters (https://www.fao.org/livestock-systems/global-distributions/en/)
 - **Land Use**: ESA WorldCover 2021 (https://worldcover2021.esa.int/)
-- **Tsetse Distribution**: PAAT tsetse maps (http://www.fao.org/paat/)
-- **Population**: GPWv4 population density (https://sedac.ciesin.columbia.edu/data/collection/gpw-v4)
+- **Tsetse Distribution**: FAO tsetse distribution map (https://openknowledge.fao.org/items/956f7aad-64e2-4bff-af3b-623b2215587c)
+- **Population**: GPWv4 population density (https://cran.r-project.org/web/packages/geodata/geodata.pdf)
 
 ### Utility Scripts
 
