@@ -4,16 +4,7 @@ Spatial epidemiological analysis of African Animal Trypanosomiasis (AAT) prevale
 
 ## Overview
 
-This repository contains R code for analyzing bovine trypanosomiasis prevalence using diagnostic test data, environmental covariates, and Bayesian spatial modeling. The analysis produces prevalence maps, cattle-at-risk assessments, and cost-effectiveness evaluations for diagnostic strategies across African countries.
-
-## Key Features
-
-- **Spatial Bayesian Modeling**: INLA framework with spatial random effects
-- **Multi-country Analysis**: Continental Africa and country-specific (Ethiopia, Nigeria) studies
-- **Diagnostic Test Integration**: BCT (rapid test) and PCR (laboratory) data
-- **Uncertainty Quantification**: Full posterior distributions and confidence intervals
-- **Economic Analysis**: Cost-effectiveness and Expected Value of Sample Information (EVSI)
-- **Administrative Mapping**: LGA/zone-level prevalence aggregation
+This repository contains R code for analyzing bovine trypanosomiasis prevalence using diagnostic test data, environmental covariates, and Bayesian spatial modeling. The analysis produces prevalence maps and infected cattle assessments, across Nigeria and Ethiopia.
 
 ## Repository Structure
 
@@ -25,8 +16,6 @@ This repository contains R code for analyzing bovine trypanosomiasis prevalence 
 ##### Country-Specific Analysis
 - **`Analysis_ETH/`** - Ethiopia-specific analysis
 - **`Analysis_NGA/`** - Nigeria-specific analysis  
-- **`Analysis_ETH_all_PCR/`** - Ethiopia with all PCR data
-- **`Analysis_NGA_all_PCR/`** - Nigeria with all PCR data
 
 **Key Scripts in Each Country Directory**:
 - `Prevalence_plots_optimised.R` - Main prevalence mapping and visualization
@@ -39,15 +28,7 @@ This repository contains R code for analyzing bovine trypanosomiasis prevalence 
 ##### Model Selection Scripts
 - `Model_selection_ETH.r` - Ethiopia model selection and validation
 - `Model_selection_NGA.r` - Nigeria model selection and validation
-- `Model_selection_ETH_non_linear.r` - Non-linear covariate modeling for Ethiopia
-- `Model_selection_NGA_all_PCR.r` - Nigeria PCR-specific model selection
 
-##### Specialized Analysis
-- **`Harriet_Layer/`** - Alternative analysis approaches
-  - `Analysis_ETH_max/`, `Analysis_ETH_mean/`, `Analysis_NGA_max/` - Different aggregation methods
-- **`Cattle at risk distribution inequality/`** - Burden concentration analysis
-  - `burden_concentration_analysis.R` - Lorenz curves and Gini coefficients
-  - `priority_targeting_list.R` - Priority area identification
 
 #### Individual Test Type Analysis
 - **`Bovine BCT/`** - BCT-specific analysis
@@ -235,14 +216,6 @@ All spatial data uses **WGS84 (EPSG:4326)** geographic coordinates.
 - INLA models with fine spatial meshes can be memory intensive
 - Consider computational resources for continental-scale analysis
 
-## Citation
-
-If you use this code, please cite the relevant publications and acknowledge the DIMCAT project.
-
 ## License
 
 Please refer to the project license for usage terms.
-
-## Contact
-
-For questions about the analysis methods or code implementation, please refer to the project documentation or contact the development team.
