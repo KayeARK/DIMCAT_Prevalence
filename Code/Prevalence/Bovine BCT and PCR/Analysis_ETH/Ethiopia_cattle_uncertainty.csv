@@ -1,0 +1,13 @@
+"region","mean_value_mean","mean_cattle_mean","data_uncertainty_lower","data_uncertainty_upper","data_uncertainty_width","model_uncertainty_lower","model_uncertainty_upper","model_uncertainty_width","uncertainty_ratio"
+"Addis Abeba",0.316,0,0,0,0,0,0,0,NA
+"Afar",0.224,0,0,0,0,0,0,0,NA
+"Amhara",0.378,32425,28550,36377,7828,31134,33734,2601,3.01
+"Benshangul-Gumaz",0.437,155281,141096,169395,28299,150967,159600,8633,3.28
+"Dire Dawa",0.376,0,0,0,0,0,0,0,NA
+"Gambela Peoples",0.312,101441,89254,115892,26638,95339,108358,13020,2.05
+"Harari People",0.346,0,0,0,0,0,0,0,NA
+"Oromia",0.416,1101887,995934,1200745,204811,1067007,1134624,67618,3.03
+"Somali",0.436,8545,5704,12639,6935,7206,8850,1644,4.22
+"Southern Nations, Nationalities",0.375,1995236,1809203,2168314,359111,1838339,2141247,302908,1.19
+"Tigray",0.14,0,0,0,0,0,0,0,NA
+"Total",0.382,3394817,3082784,3675161,592377,3189991,3586414,396423,1.49

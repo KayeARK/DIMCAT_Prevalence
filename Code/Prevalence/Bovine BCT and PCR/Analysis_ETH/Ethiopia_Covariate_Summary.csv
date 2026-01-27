@@ -1,0 +1,15 @@
+"Covariate","Selection_Count","Selection_Frequency"
+"tsetse",187,0.935
+"shrub",176,0.88
+"cattle",171,0.855
+"human_fp",169,0.845
+"grassland",165,0.825
+"elevation",158,0.79
+"cropland",156,0.78
+"tree",148,0.74
+"water",132,0.66
+"wetland",125,0.625
+"built",123,0.615
+"precipitation",117,0.585
+"pop_den",106,0.53
+"bare",89,0.445
