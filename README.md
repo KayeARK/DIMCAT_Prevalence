@@ -1,10 +1,10 @@
 # DIMCAT Prevalence Analysis
 
-Spatial epidemiological analysis of African Animal Trypanosomiasis (AAT) prevalence across Africa using INLA (Integrated Nested Laplace Approximation) Bayesian modeling.
+Spatial epidemiological analysis of African Animal Trypanosomosis (AAT) prevalence across Africa using INLA (Integrated Nested Laplace Approximation) for the accompanying paper "Mapping bovine trypanosomosis under diagnostic uncertainty: spetial prevalence estimates in Nigeria and Ethiopia" by Kaye et al.
 
 ## Overview
 
-This repository contains the **code infrastructure** for analyzing bovine trypanosomiasis prevalence using diagnostic test data, environmental covariates, and Bayesian spatial modeling. The analysis produces prevalence maps and infected cattle assessments across Nigeria and Ethiopia.
+This repository contains the code infrastructure for analyzing bovine trypanosomiasis prevalence using diagnostic test data, environmental covariates, and Bayesian spatial modeling. The analysis produces prevalence maps and infected cattle assessments across Nigeria and Ethiopia.
 
 **Note**: This repository contains only the analysis code. Raw data files are excluded for privacy and size considerations (see [Data Sources](#data-sources) section below).
 
@@ -168,33 +168,6 @@ source("install_packages.R")
 - Residual analysis
 - Cross-validation assessments
 
-## Usage Examples
-
-**Note**: These examples require the AAT diagnostic data to be obtained separately (see [Data Requirements](#data-requirements)).
-
-### Setting Up the Analysis
-```r
-# Install and test dependencies
-source("install_packages.R")
-source("test_packages.R")
-
-# Ensure data is in correct directories (see Data Requirements section)
-```
-
-### Basic Prevalence Analysis
-```r
-# Set target country (requires corresponding data files)
-countries_to_infer <- c("Nigeria")  # or "Ethiopia"
-
-# Run prevalence analysis (after obtaining data)
-source("Code/Prevalence/Bovine BCT and PCR/INLA_Prevalence.R")
-```
-
-### Model Comparison
-```r
-# Compare model specifications (requires diagnostic data)
-# Individual scripts for Ethiopia and Nigeria model selection
-```
 
 ## File Naming Conventions
 
@@ -211,7 +184,7 @@ All spatial data uses **WGS84 (EPSG:4326)** geographic coordinates.
 
 ### Code-Only Repository
 This repository contains **analysis code only**. Raw data files are excluded for:
-- **Privacy**: AAT diagnostic data contains sensitive surveillance information
+- **Privacy**: AAT diagnostic data will remain private until the publication of the Continental Atlas
 - **File Size**: Environmental rasters exceed GitHub storage limits
 - **Reproducibility**: All data sources are publicly available (except AAT data)
 
