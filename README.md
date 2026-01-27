@@ -4,7 +4,9 @@ Spatial epidemiological analysis of African Animal Trypanosomiasis (AAT) prevale
 
 ## Overview
 
-This repository contains R code for analyzing bovine trypanosomiasis prevalence using diagnostic test data, environmental covariates, and Bayesian spatial modeling. The analysis produces prevalence maps and infected cattle assessments, across Nigeria and Ethiopia.
+This repository contains the **code infrastructure** for analyzing bovine trypanosomiasis prevalence using diagnostic test data, environmental covariates, and Bayesian spatial modeling. The analysis produces prevalence maps and infected cattle assessments across Nigeria and Ethiopia.
+
+**Note**: This repository contains only the analysis code. Raw data files are excluded for privacy and size considerations (see [Data Sources](#data-sources) section below).
 
 ## Repository Structure
 
@@ -50,18 +52,25 @@ Inter-species and spatial correlation analysis:
 - `Correlation.r` - Correlation analysis between species/locations
 - `Correlation continental.r` - Continental-scale correlation patterns
 
-### Data Structure (`Data/`)
+### Data Structure
 
-#### Raw Data
-- **`ContAtlas_v2/Bovine data/`** - Diagnostic test data (Excel format)
-- **`ContAtlas_v3/`** - Updated data versions
+**Important**: Raw data files are **not included** in this repository for privacy and size considerations.
 
-#### Spatial Covariates (`Data/Covariates/`)
-- **`livestock/`** - Livestock density rasters by species and year
-- **`tsenumbspec/`** - Tsetse fly distribution (continental Africa)
-- **`tsetse_Harriet/`** - Alternative tsetse distribution maps
-- Climate data (downloaded via `worldclim_country()`)
-- Elevation data (SRTM 30s resolution)
+#### Required Data Sources (Not Included)
+
+**AAT Diagnostic Data**:
+- Continental Atlas diagnostic test data (Excel format) - **Excluded for privacy reasons**
+- Contains sensitive livestock disease surveillance data
+- Source: FAO Continental Atlas of African Animal Trypanosomiasis
+- Access: Contact project collaborators or FAO for data permissions
+
+**Environmental Covariates** (Large files - obtain from public sources):
+- **Climate**: WorldClim v2.1 data (auto-downloaded via `geodata::worldclim_country()`)
+- **Elevation**: SRTM 30s resolution (via `geodata::elevation_30s()`)
+- **Livestock**: GLW4 livestock density rasters (https://www.fao.org/livestock/livestock-systems-sector/global-datasets/gridded-livestock-of-the-world/en/)
+- **Land Use**: ESA WorldCover 2021 (https://worldcover2021.esa.int/)
+- **Tsetse Distribution**: PAAT tsetse maps (http://www.fao.org/paat/)
+- **Population**: GPWv4 population density (https://sedac.ciesin.columbia.edu/data/collection/gpw-v4)
 
 ### Utility Scripts
 
@@ -86,11 +95,40 @@ Inter-species and spatial correlation analysis:
 - **dplyr** - Data manipulation
 
 ### Data Requirements
-- Continental Atlas diagnostic test data (Excel files)
-- WorldClim climate data (automatically downloaded)
-- Livestock density rasters (GLW4 project)
-- Tsetse fly distribution maps
-- Administrative boundary data (GADM)
+
+#### Setting Up the Analysis Environment
+
+**Step 1: Install Dependencies**
+```r
+source("install_packages.R")  # Install all required R packages
+source("test_packages.R")     # Verify installations
+```
+
+**Step 2: Obtain Required Data**
+
+Due to privacy and file size considerations, users must obtain data separately:
+
+1. **AAT Diagnostic Data** (Privacy Protected):
+   - Contact FAO or project collaborators for Continental Atlas data access
+   - Place Excel files in: `Data/ContAtlas_v2/Bovine data/` and `Data/ContAtlas_v3/`
+
+2. **Environmental Covariates** (Automatically Downloaded):
+   - Climate and elevation data downloaded automatically by analysis scripts
+   - Livestock and land use data - follow source links above
+
+**Step 3: Expected Directory Structure**
+```
+Data/
+├── ContAtlas_v2/Bovine data/    # AAT data (obtain separately)
+├── ContAtlas_v3/                # Updated AAT data (obtain separately)
+└── Covariates/                  # Auto-downloaded environmental data
+    ├── climate/
+    ├── elevation/
+    ├── livestock/
+    ├── landuse/
+    ├── population/
+    └── tsenumbspec/
+```
 
 ## Analysis Workflow
 
@@ -168,25 +206,30 @@ PC (Penalized Complexity) priors for hyperparameters
 
 ## Usage Examples
 
+**Note**: These examples require the AAT diagnostic data to be obtained separately (see [Data Requirements](#data-requirements)).
+
+### Setting Up the Analysis
+```r
+# Install and test dependencies
+source("install_packages.R")
+source("test_packages.R")
+
+# Ensure data is in correct directories (see Data Requirements section)
+```
+
 ### Basic Prevalence Analysis
 ```r
-# Set target country
+# Set target country (requires corresponding data files)
 countries_to_infer <- c("Nigeria")  # or "Ethiopia"
 
-# Run main analysis
-source("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Prevalence_plots_optimised.R")
+# Run prevalence analysis (after obtaining data)
+source("Code/Prevalence/Bovine BCT and PCR/INLA_Prevalence.R")
 ```
 
-### Cattle-at-Risk Assessment  
+### Model Comparison
 ```r
-# Generate cattle-at-risk maps
-source("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Cattle_at_risk.R")
-```
-
-### Model Selection
-```r
-# Compare model specifications
-source("Code/Prevalence/Bovine BCT and PCR/Model_selection_NGA.r")
+# Compare model specifications (requires diagnostic data)
+# Individual scripts for Ethiopia and Nigeria model selection
 ```
 
 ## File Naming Conventions
@@ -201,6 +244,19 @@ source("Code/Prevalence/Bovine BCT and PCR/Model_selection_NGA.r")
 All spatial data uses **WGS84 (EPSG:4326)** geographic coordinates.
 
 ## Important Notes
+
+### Code-Only Repository
+This repository contains **analysis code only**. Raw data files are excluded for:
+- **Privacy**: AAT diagnostic data contains sensitive surveillance information
+- **File Size**: Environmental rasters exceed GitHub storage limits
+- **Reproducibility**: All data sources are publicly available (except AAT data)
+
+### Data Access Requirements
+- **AAT Data**: Requires permission from data providers due to privacy considerations
+- **Environmental Data**: Publicly available from international organizations
+- **Automated Downloads**: Climate/elevation data downloaded automatically by scripts
+
+### Technical Requirements
 
 ### Data Validation
 - Always validate coordinate ranges for geographic plausibility
