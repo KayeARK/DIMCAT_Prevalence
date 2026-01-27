@@ -1,6 +1,6 @@
 # DIMCAT Prevalence Analysis
 
-Spatial epidemiological analysis of African Animal Trypanosomosis (AAT) prevalence across Africa using INLA (Integrated Nested Laplace Approximation) for the accompanying paper "Mapping bovine trypanosomosis under diagnostic uncertainty: spetial prevalence estimates in Nigeria and Ethiopia" by Kaye et al.
+Spatial epidemiological analysis of African Animal Trypanosomosis (AAT) prevalence across Africa using INLA (Integrated Nested Laplace Approximation) for the accompanying paper "Mapping bovine trypanosomosis under diagnostic uncertainty: spatial prevalence estimates in Nigeria and Ethiopia" by Kaye et al.
 
 ## Overview
 
