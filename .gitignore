@@ -67,4 +67,10 @@ Code/INLAContinental.r
 Code/INLACountry.r
 Code/INLATestRainfall.r
 Code/prelim_analysis_2.r
+Code/Prevalence/Bovine BCT/
+Code/Prevalence/Bovine PCR/
+Code/Prevalence/Bovine BCT and PCR/Analysis_ETH_all_PCR/
+Code/Prevalence/Bovine BCT and PCR/Analysis_NGA_all_PCR/
+Code/Prevalence/Bovine BCT and PCR/Model_selection_ETH_non_linear.r
+Code/Prevalence/Bovine BCT and PCR/Harriet_Layer/
 
