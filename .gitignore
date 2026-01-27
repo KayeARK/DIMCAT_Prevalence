@@ -1,13 +1,13 @@
 # Large data files
 #*.csv
 #*.xlsx
-*.xls
+#*.xls
 *.pdf
 *.png
 *.jpg
 *.jpeg
 *.gif
-#*.tif
+*.tif
 *.tiff
 *.rds
 *.RData
