@@ -6,7 +6,7 @@ Spatial epidemiological analysis of African Animal Trypanosomosis (AAT) prevalen
 
 This repository contains the code infrastructure for analyzing bovine trypanosomiasis prevalence using diagnostic test data, environmental covariates, and Bayesian spatial modeling. The analysis produces prevalence maps and infected cattle assessments across Nigeria and Ethiopia.
 
-**Note**: This repository contains the analysis code, some raw data files are excluded for size considerations (see [Data Sources](#data-sources) section below).
+**Note**: This repository contains the analysis code, some raw data files are excluded for size considerations (see below).
 
 ## Repository Structure
 
