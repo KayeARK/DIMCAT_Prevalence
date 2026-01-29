@@ -6,7 +6,7 @@ Spatial epidemiological analysis of African Animal Trypanosomosis (AAT) prevalen
 
 This repository contains the code infrastructure for analyzing bovine trypanosomiasis prevalence using diagnostic test data, environmental covariates, and Bayesian spatial modeling. The analysis produces prevalence maps and infected cattle assessments across Nigeria and Ethiopia.
 
-**Note**: This repository contains only the analysis code. Raw data files are excluded for privacy and size considerations (see [Data Sources](#data-sources) section below).
+**Note**: This repository contains the analysis code, some raw data files are excluded for size considerations (see [Data Sources](#data-sources) section below).
 
 ## Repository Structure
 
@@ -45,12 +45,9 @@ Inter-species and spatial correlation analysis:
 
 ### Data Structure
 
-**Important**: Raw data files are **not included** in this repository for privacy and size considerations.
+**Important**: Some raw data files are **not included** in this repository due to size considerations.
 
 #### Required Data Sources (Not Included)
-
-**AAT Diagnostic Data**:
-- Continental Atlas diagnostic test data (Excel format) - **Excluded until publication of the Atlas**
 
 **Environmental Covariates** (Large files - obtain from public sources):
 - **Climate**: WorldClim v2.1 data (auto-downloaded via `geodata::worldclim_country()`)
@@ -89,14 +86,11 @@ source("test_packages.R")     # Verify installations
 
 **Step 2: Obtain Required Data**
 
-Due to privacy and file size considerations, users must obtain data separately:
+Due to file size considerations, users must obtain some data separately:
 
-1. **AAT Diagnostic Data**:
-   - Upload your own AAT data
-
-2. **Environmental Covariates** (Automatically Downloaded):
-   - Climate and elevation data downloaded automatically by analysis scripts
-   - Livestock and land use data - follow source links above
+**Environmental Covariates** (Automatically Downloaded):
+- Climate and elevation data downloaded automatically by analysis scripts
+- Livestock and land use data - follow source links above
 
 **Step 3: Expected Directory Structure**
 ```
@@ -124,7 +118,13 @@ source("install_packages.R")
 # Validate coordinates and sample sizes
 ```
 
-### 2. Model Fitting
+### 2. Diagnostic test performance inference
+```r
+# MCMC for inference of sensitivity and specificity
+# Case readjustment
+```
+
+### 3. Model Fitting
 ```r
 # INLA Bayesian spatial modeling
 # PC priors for hyperparameters
@@ -132,7 +132,7 @@ source("install_packages.R")
 # Model comparison using WAIC
 ```
 
-### 3. Prediction and Mapping
+### 4. Prediction and Mapping
 ```r
 # Generate prevalence surfaces
 # Quantify uncertainty (confidence intervals)  
@@ -140,7 +140,7 @@ source("install_packages.R")
 # Administrative unit aggregation
 ```
 
-### 4. Cattle-at-Risk Assessment
+### 5. Cattle-at-Risk Assessment
 ```r
 # Combine prevalence with cattle density
 # Apply tsetse distribution masks
@@ -182,14 +182,10 @@ All spatial data uses **WGS84 (EPSG:4326)** geographic coordinates.
 
 ## Important Notes
 
-### Code-Only Repository
-This repository contains **analysis code only**. Raw data files are excluded for:
-- **Privacy**: AAT diagnostic data will remain private until the publication of the Continental Atlas
-- **File Size**: Environmental rasters exceed GitHub storage limits
-- **Reproducibility**: All data sources are publicly available (except AAT data)
+### Exclusion of Some Data
+Some raw data files are excluded due to file size constraints.
 
 ### Data Access Requirements
-- **AAT Data**: Requires permission from data providers due to privacy considerations
 - **Environmental Data**: Publicly available from international organizations
 - **Automated Downloads**: Climate/elevation data downloaded automatically by scripts
 
