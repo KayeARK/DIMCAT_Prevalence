@@ -304,7 +304,7 @@ bovine_bct_raw <- readxl::read_excel("Data/ContAtlas_v3/Bovine data/AAT_PR_bovin
 bovine_pcr_raw <- readxl::read_excel("Data/ContAtlas_v3/Bovine data/AT_PREV_bovine_PCR_Table.xls")
 
 # Add test type identifier to each dataset
-bovine_bct_raw$Test_Type <- "BCT/HCT"
+bovine_bct_raw$Test_Type <- "HCT/BCT"
 bovine_pcr_raw$Test_Type <- "PCR"
 
 # Standardize column names - ensure both datasets have the same column structure
@@ -379,7 +379,7 @@ process_bovine_data <- function(data) {
 bovine_ethiopia_sf <- process_bovine_data(bovine_data_raw)
 if(!is.null(bovine_ethiopia_sf)) {
   cat("Found", nrow(bovine_ethiopia_sf), "bovine data points within Ethiopia\n")
-  cat("  - BCT tests:", sum(bovine_ethiopia_sf$Test_Type == "BCT/HCT"), "\n")
+  cat("  - HCT/BCT tests:", sum(bovine_ethiopia_sf$Test_Type == "HCT/BCT"), "\n")
   cat("  - PCR tests:", sum(bovine_ethiopia_sf$Test_Type == "PCR"), "\n")
 } else {
   cat("No bovine data available for Ethiopia - maps will show choropleth only\n")
@@ -485,7 +485,7 @@ create_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bo
                            labels = c("10", "50", "100", "200+")) +
       # Add color scale for test types
       scale_color_manual(name = "Test type",
-                        values = c("BCT/HCT" = "red", "PCR" = "blue"),
+                        values = c("HCT/BCT" = "red", "PCR" = "blue"),
                         guide = guide_legend(override.aes = list(size = 3, alpha = 0.8)))
   }
   
@@ -516,7 +516,7 @@ lga_prevalence_lower <- zone_prevalence_lower
 lga_prevalence_upper <- zone_prevalence_upper
 
 # Create choropleth maps - mean map first, then percentile maps with bovine data overlay
-p_mean <- create_choropleth(zone_prevalence_mean, "(mean)", show_uncertainty = TRUE, add_inset = TRUE)
+p_mean <- create_choropleth(zone_prevalence_mean, "(mean)", data_type = "mean", add_bovine = TRUE, show_uncertainty = TRUE, add_inset = TRUE)
 p_lower <- create_choropleth(zone_prevalence_lower, "(2.5th percentile)", data_type = "lower", add_bovine = TRUE, show_uncertainty = TRUE)
 p_upper <- create_choropleth(zone_prevalence_upper, "(97.5th percentile)", data_type = "upper", add_bovine = TRUE, show_uncertainty = TRUE)
 
@@ -600,14 +600,14 @@ p_lower_combined <- create_combined_plot(lga_prevalence_lower, "2.5th percentile
 p_upper_combined <- create_combined_plot(lga_prevalence_upper, "97.5th percentile")
 
 # Save all plots to Analysis_ETH directory
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_mean.pdf", plot = p_mean, width = 12, height = 10)
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_lower.pdf", plot = p_lower, width = 12, height = 10)
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_upper.pdf", plot = p_upper, width = 12, height = 10)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_mean.pdf", plot = p_mean, width = 12, height = 10, dpi = 150)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_lower.pdf", plot = p_lower, width = 12, height = 10, dpi = 150)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_upper.pdf", plot = p_upper, width = 12, height = 10, dpi = 150)
 
 # Save combined plots (histogram + boxplot for each estimate type) - more compact dimensions
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_mean_analysis.pdf", plot = p_mean_combined, width = 10, height = 6)
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_lower_analysis.pdf", plot = p_lower_combined, width = 10, height = 6)
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_upper_analysis.pdf", plot = p_upper_combined, width = 10, height = 6)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_mean_analysis.pdf", plot = p_mean_combined, width = 10, height = 6, dpi = 150)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_lower_analysis.pdf", plot = p_lower_combined, width = 10, height = 6, dpi = 150)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_upper_analysis.pdf", plot = p_upper_combined, width = 10, height = 6, dpi = 150)
 
 # Display all plots
 print(p_mean)

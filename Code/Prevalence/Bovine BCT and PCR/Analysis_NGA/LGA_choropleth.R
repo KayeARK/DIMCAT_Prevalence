@@ -465,7 +465,7 @@ create_choropleth <- function(lga_data, title_suffix, add_bovine_data = FALSE, s
 }
 
 # Create all three maps (only add bovine data to percentile plots, show uncertainty on percentile plots)
-p_mean <- create_choropleth(lga_prevalence_mean, "(mean)", add_bovine_data = FALSE, show_uncertainty = TRUE, add_inset = TRUE)
+p_mean <- create_choropleth(lga_prevalence_mean, "(mean)", add_bovine_data = TRUE, show_uncertainty = TRUE, add_inset = TRUE)
 p_lower <- create_choropleth(lga_prevalence_lower, "(2.5th percentile)", add_bovine_data = TRUE, show_uncertainty = TRUE)
 p_upper <- create_choropleth(lga_prevalence_upper, "(97.5th percentile)", add_bovine_data = TRUE, show_uncertainty = TRUE)
 
@@ -546,14 +546,14 @@ p_lower_combined <- create_combined_plot(lga_prevalence_lower, "2.5th percentile
 p_upper_combined <- create_combined_plot(lga_prevalence_upper, "97.5th percentile")
 
 # Save all plots to current working directory
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_mean.pdf", plot = p_mean, width = 12, height = 10)
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_lower.pdf", plot = p_lower, width = 12, height = 10)
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_upper.pdf", plot = p_upper, width = 12, height = 10)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_mean.pdf", plot = p_mean, width = 12, height = 10, dpi = 150)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_lower.pdf", plot = p_lower, width = 12, height = 10, dpi = 150)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_upper.pdf", plot = p_upper, width = 12, height = 10, dpi = 150)
 
 # Save combined plots (histogram + boxplot for each estimate type) - more compact dimensions
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_mean_analysis.pdf", plot = p_mean_combined, width = 10, height = 6)
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_lower_analysis.pdf", plot = p_lower_combined, width = 10, height = 6)
-ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_upper_analysis.pdf", plot = p_upper_combined, width = 10, height = 6)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_mean_analysis.pdf", plot = p_mean_combined, width = 10, height = 6, dpi = 150)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_lower_analysis.pdf", plot = p_lower_combined, width = 10, height = 6, dpi = 150)
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_upper_analysis.pdf", plot = p_upper_combined, width = 10, height = 6, dpi = 150)
 
 # Display all plots
 print(p_mean)
