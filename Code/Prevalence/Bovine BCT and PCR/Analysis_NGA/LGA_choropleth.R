@@ -391,6 +391,7 @@ create_choropleth <- function(lga_data, title_suffix, add_bovine_data = FALSE, s
       direction = 1,
       option = "viridis",
       limits = c(0, 1),
+      trans = "sqrt",  # Square root transformation makes medium values more prominent
       labels = scales::percent_format(accuracy = 0.1)
     )
   
@@ -411,7 +412,7 @@ create_choropleth <- function(lga_data, title_suffix, add_bovine_data = FALSE, s
                            labels = c("10", "50", "100", "200+")) +
       # Add color scale for test types
       scale_color_manual(name = "Test type",
-                        values = c("BCT" = "red", "PCR" = "blue"),
+                        values = c("BCT" = "#00FFFF", "PCR" = "#FF6347"),  # Bright cyan and tomato - distinct colors with high contrast
                         guide = guide_legend(override.aes = list(size = 3, alpha = 0.8)))
   }
   
@@ -475,7 +476,7 @@ create_combined_plot <- function(lga_data, estimate_name) {
   p_hist <- ggplot(lga_data, aes(x = lga_prevalence, fill = after_stat(x))) +
     geom_histogram(binwidth = 0.04, color = "white", linewidth = 0.2,
                    boundary = 0, closed = "left") +
-    scale_fill_viridis_c(option = "viridis", guide = "none") +  # Same as choropleth, no legend
+    scale_fill_viridis_c(option = "viridis", guide = "none", trans = "sqrt") +  # Same as choropleth with sqrt transformation, no legend
     scale_x_continuous(labels = scales::percent_format(), breaks = seq(0, 1, 0.25),
                        limits = c(0, 1), expand = expansion(mult = c(0.02, 0.02))) +
     scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
