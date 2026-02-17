@@ -76,6 +76,9 @@ cat("Tsetse raster loaded and binarized successfully\n")
 cat("Tsetse data range:", range(values(r_tsetse), na.rm = TRUE), "(0=no tsetse, 1=tsetse present)\n")
 cat("Note: Tsetse will be reprojected to cattle grid during masking for proper alignment\n")
 
+# Calculate total cattle in tsetse belt (will use aligned tsetse raster after reprojection)
+cat("Note: Total cattle calculation will be performed after tsetse reprojection for proper alignment\n")
+
 # Get model files
 n_datasets <- length(list.files("Code/Prevalence/Bovine BCT and PCR/Projections_ETH/", pattern = "Projections_model_.*\\.csv"))
 cat("Found", n_datasets, "projection files for Ethiopia\n")
@@ -240,7 +243,6 @@ r_tsetse_aligned[is.na(r_tsetse_aligned)] <- 0
 tsetse_values <- raster::extract(r_tsetse_aligned, coords_mean_transformed)
 tsetse_values[is.na(tsetse_values)] <- 0  # Assume no tsetse where data is missing
 
-cat("Tsetse raster reprojected and aligned to cattle grid\n")
 
 # Apply CORRECTED tsetse logic: Calculate cattle at risk WHERE tsetse IS present
 # Cattle can only be at risk of infection where tsetse flies exist
@@ -306,10 +308,19 @@ infected_cattle_mean <- dpm_mean_sf$value * cattle_values_filtered * tsetse_mult
 infected_cattle_lower <- dpm_lower_sf$value * cattle_values_filtered * tsetse_multiplier
 infected_cattle_upper <- dpm_upper_sf$value * cattle_values_filtered * tsetse_multiplier
 
+# Calculate total cattle in tsetse belt using SAME methodology as infected cattle
+# Total cattle = 1 × cattle × tsetse_multiplier (consistent with existing approach)
+total_cattle_in_tsetse <- 1 * cattle_values_filtered * tsetse_multiplier
+
 cat("✓ Infected cattle calculated with CORRECT tsetse masking:\n")
 cat("  - Cattle at risk calculated ONLY where tsetse is present\n")
 cat("  - Areas with tsetse:", sum(tsetse_present), "\n") 
 cat("  - Areas without tsetse (0 cattle at risk):", sum(!tsetse_present), "\n")
+
+cat("✓ Total cattle in tsetse belt calculated using SAME methodology:\n")
+cat("  - TOTAL CATTLE IN TSETSE BELT:", formatC(sum(total_cattle_in_tsetse, na.rm = TRUE), format = "f", digits = 0, big.mark = ","), "head\n")
+cat("  - Total cattle overall (all locations):", formatC(sum(cattle_values_filtered, na.rm = TRUE), format = "f", digits = 0, big.mark = ","), "head\n")
+cat("  - Percentage in tsetse belt:", formatC(100 * sum(total_cattle_in_tsetse, na.rm = TRUE) / sum(cattle_values_filtered, na.rm = TRUE), format = "f", digits = 1), "%\n")
 
 # STEP 5: Spatial join using mean coordinates (matching original script)
 cat("Performing spatial joins with Ethiopian regions...\n")

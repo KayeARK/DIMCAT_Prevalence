@@ -145,7 +145,7 @@ bovine_bct_raw <- read_excel("Data/ContAtlas_v3/Bovine data/AAT_PR_bovine_BCT-HC
 bovine_pcr_raw <- read_excel("Data/ContAtlas_v3/Bovine data/AT_PREV_bovine_PCR_Table.xls")
 
 # Add test type identifier to each dataset
-bovine_bct_raw$Test_Type <- "BCT"
+bovine_bct_raw$Test_Type <- "HCT/BCT"
 bovine_pcr_raw$Test_Type <- "PCR"
 
 # Standardize column names - ensure both datasets have the same column structure
@@ -210,7 +210,7 @@ process_bovine_data <- function(data) {
 # Process the bovine data
 bovine_nigeria_sf <- process_bovine_data(bovine_data_raw)
 cat("Found", nrow(bovine_nigeria_sf), "bovine data points within Nigeria\n")
-cat("  - BCT tests:", sum(bovine_nigeria_sf$Test_Type == "BCT"), "\n")
+cat("  - BCT tests:", sum(bovine_nigeria_sf$Test_Type == "HCT/BCT"), "\n")
 cat("  - PCR tests:", sum(bovine_nigeria_sf$Test_Type == "PCR"), "\n")
 
 # Function to process uncertainty data (swap coordinates and create spatial points)
@@ -357,7 +357,7 @@ create_uncertainty_choropleth <- function(lga_data, title_suffix, legend_title, 
                          labels = c("10", "50", "100", "200+")) +
     # Add color scale for test types
     scale_color_manual(name = "Test type",
-                      values = c("BCT" = "red", "PCR" = "blue"),
+                      values = c("HCT/BCT" = "red", "PCR" = "blue"),
                       guide = guide_legend(override.aes = list(size = 3, alpha = 0.8))) +
     # Add scale bar and north arrow
     annotation_scale(location = "bl", width_hint = 0.3, text_cex = 0.8, 
