@@ -344,8 +344,19 @@ create_choropleth <- function(zone_data, title_suffix, data_type = "mean", add_b
   # Add region boundaries
   p <- p + geom_sf(data = ethiopia_regions_sf, fill = NA, color = "black", lwd = 0.5)
   
-  # Calculate appropriate limits for cattle at risk
+  # Calculate appropriate limits for cattle at risk - STANDARDIZED across countries
   max_cattle_at_risk <- max(zones_with_cattle[[fill_column]], na.rm = TRUE)
+  
+  # Set standardized limits for comparison across Ethiopia and Nigeria
+  # These values should be adjusted based on the data range across both countries
+  standardized_limits <- if(use_log) {
+    c(0, 5.6)  # For log scale - adjust based on log10 values
+  } else {
+    c(0, 500000)  # For regular scale - 500k cattle max, adjust as needed
+  }
+  
+  cat("Ethiopia", data_type, "- Using standardized limits:", paste(standardized_limits, collapse = " to "), 
+      "(country max:", round(max_cattle_at_risk), ")\n")
   
   # Create appropriate title and legend based on log transformation
   legend_name <- if(use_log) expression(atop("Infected cattle", "("*log[10] * ")")) else "Cattle\nat risk"
@@ -355,7 +366,7 @@ create_choropleth <- function(zone_data, title_suffix, data_type = "mean", add_b
       na.value = "grey90",
       direction = 1,
       option = "plasma",  # Different color palette for cattle at risk
-      limits = c(0, max_cattle_at_risk),
+      limits = standardized_limits,  # Use standardized limits for comparison
       labels = if(use_log) {
         function(x) format(x, digits = 2, scientific = FALSE)  # Just show log values as-is
       } else {

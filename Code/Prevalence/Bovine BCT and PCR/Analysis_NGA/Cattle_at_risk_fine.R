@@ -13,6 +13,7 @@ library(cowplot)
 
 # Get Nigerian administrative boundaries at LGA level (level 2)
 # Nigeria GADM data only goes to level 2 (Local Government Areas), not level 3 (wards)
+cat("Loading Nigerian administrative boundaries...\n")
 nigeria_lgas <- gadm(country = "NGA", level = 2, path = tempdir())
 nigeria_lgas_sf <- st_as_sf(nigeria_lgas)
 
@@ -363,7 +364,7 @@ create_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bo
       na.value = "grey90",
       direction = 1,
       option = "plasma",  # Different color palette for cattle at risk
-      limits = c(0, max_cattle_at_risk),
+      limits = c(0, 5.6),
       labels = if(use_log) {
         function(x) format(x, digits = 2, scientific = FALSE)  # Just show log values as-is
       } else {
