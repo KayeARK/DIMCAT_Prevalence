@@ -91,31 +91,77 @@ create_reference_map <- function(country_code, country_name, prevalence_data, ad
         lat = st_coordinates(st_centroid(.))[,2]
       ) %>%
       st_drop_geometry() %>%
-      # Manual adjustment for Rivers label
+      # Identify overlapping locations in southern Nigeria (lat < 7.5°N approximately)
       mutate(
-        lon = ifelse(standardized_name == "Rivers", lon - 0.1, lon),  # Move left
-        lat = ifelse(standardized_name == "Rivers", lat + 0.2, lat),  # Move up
-        lon = ifelse(standardized_name == "Oromia", lon + 1, lon)  # Move left
+        is_southern_nigeria = country_name == "Nigeria" & lat < 7.5,
+        # Define which labels are likely to overlap - expanded list
+        needs_external_label = standardized_name %in% c("Rivers", "Cross River", "Akwa Ibom", "Bayelsa", 
+                                                        "Kwara", "Osun", "Anambra", "Ebonyi", "Harari", 
+                                                        "Ondo", "Abia"),
+        # Manual adjustment for overlapping areas - move labels outside and show lines
+        lon_adjusted = case_when(
+          # Original southern Nigeria overlaps
+          standardized_name == "Rivers" ~ lon - 0.3,  # Move far left
+          standardized_name == "Cross River" ~ lon + 1.2,  # Move right
+          standardized_name == "Akwa Ibom" ~ lon + 0.8,  # Move slightly right
+          standardized_name == "Bayelsa" ~ lon - 1.0,  # Move left
+          # Additional Nigeria overlaps
+          standardized_name == "Kwara" ~ lon - 1.2,  # Move left
+          standardized_name == "Osun" ~ lon - 1.5,  # Move far left
+          standardized_name == "Anambra" ~ lon - 1.3,  # Move right
+          standardized_name == "Ebonyi" ~ lon + 1.3,  # Move far right
+          standardized_name == "Ondo" ~ lon - 1.1,  # Move left
+          standardized_name == "Abia" ~ lon + 0.9,  # Move right
+          # Ethiopia overlap
+          standardized_name == "Harari" ~ lon - 0,  # Move left
+          standardized_name == "Oromia" ~ lon + 1,  # Move Oromia (Ethiopia) left
+          TRUE ~ lon
+        ),
+        lat_adjusted = case_when(
+          # Original southern Nigeria overlaps
+          standardized_name == "Rivers" ~ lat - 0.9,  # Move up
+          standardized_name == "Cross River" ~ lat + 0.5,  # Move up
+          standardized_name == "Akwa Ibom" ~ lat - 0.7,  # Move down
+          standardized_name == "Bayelsa" ~ lat - 0.5,  # Move down
+          # Additional Nigeria overlaps
+          standardized_name == "Kwara" ~ lat + 0.8,  # Move up
+          standardized_name == "Osun" ~ lat ,  # Move down
+          standardized_name == "Anambra" ~ lat ,  # Move up
+          standardized_name == "Ebonyi" ~ lat + 0.6,  # Move up
+          standardized_name == "Ondo" ~ lat - 0.8,  # Move down
+          standardized_name == "Abia" ~ lat ,  # Move down
+          # Ethiopia overlap
+          standardized_name == "Harari" ~ lat - 0.5,  # Move up
+          TRUE ~ lat
+        )
       )
     
     ref_map <- ggplot(country_sf) +
       geom_sf(aes(fill = mean_prev), color = "white", size = 0.3) +
       scale_fill_viridis_c(name = "Prevalence", option = "viridis", trans = "sqrt", 
                           na.value = "lightgray", limits = c(0, 1)) +
+      # Add connecting lines for externally positioned labels
+      geom_segment(data = country_centroids %>% filter(needs_external_label),
+                   aes(x = lon, y = lat, xend = lon_adjusted, yend = lat_adjusted),
+                   color = "gray50", size = 0.3, alpha = 0.6) +
+      # Add small points at original centroids for labels that were moved outside
+      geom_point(data = country_centroids %>% filter(needs_external_label),
+                 aes(x = lon, y = lat), size = 1, color = "gray30", alpha = 0.7) +
+      # Add text labels at adjusted positions
       geom_text_repel(data = country_centroids,
-                      aes(x = lon, y = lat, label = standardized_name), 
-                      size = 1.6, 
+                      aes(x = lon_adjusted, y = lat_adjusted, label = standardized_name), 
+                      size = 2.6, 
                       color = "black",      # Black text with white outline for visibility
                       fontface = "bold",    # Bold for better readability
                       bg.color = "white",   # White background behind text
                       bg.r = 0.1,          # Radius of background
                       box.padding = 0.05,
                       point.padding = 0.05,
-                      force = 0,
-                      force_pull = 20,      # Strong pull to keep labels near original position
+                      force = 0,           # Slight force to avoid overlaps
+                      force_pull = 20,      # Reduced pull to allow more movement
                       max.overlaps = Inf,
-                      segment.color = NA,  # Hide connecting lines
-                      max.iter = 3000,     # Fewer iterations for minimal movement
+                      segment.color = NA,  # Hide ggrepel's own segments since we draw our own
+                      max.iter = 1000,     # Allow more iterations for better positioning
                       seed = 42) +         # Reproducible positioning
       theme_void() +
       theme(
