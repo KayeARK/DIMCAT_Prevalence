@@ -18,7 +18,7 @@ cat("Analyzing WAIC increase data for", country_name, "...\n")
 #===============================================================================
 
 # Get list of all WAIC increase files
-waic_files <- list.files(paste0("Code/Prevalence/Bovine BCT and PCR/WAIC_increase_", country_code), 
+waic_files <- list.files(paste0("Code/Prevalence/Bovine BCT and PCR/WAIC_increase_", country_code,"_better_mesh/"), 
                          pattern = "WAIC_increase_model_.*\\.csv$", 
                          full.names = TRUE)
 

@@ -70,7 +70,7 @@ cat("After coordinate aggregation:", nrow(coord_sample_mapping), "unique locatio
 cat("Reduced from", nrow(data_original), "to", nrow(coord_sample_mapping), "records\n")
 
 # Loop through iterations (adjust range as needed)
-for (iteration in 207:1007){
+for (iteration in 8:1007){
   print(paste("Processing iteration", iteration-7))
   
   # Extract positive cases from original data for this iteration
@@ -612,6 +612,182 @@ for (iteration in 207:1007){
   pred_mean <- res$summary.fitted.values[index, "mean"]
   pred_ll <- res$summary.fitted.values[index, "0.025quant"]
   pred_ul <- res$summary.fitted.values[index, "0.975quant"]
+
+  ##############################################
+####### REVIEWER 4 DIAGNOSTICS BLOCK #########
+##############################################
+
+cat("Running Reviewer #4 diagnostics...\n")
+
+library(FNN)
+
+##############################################
+# 1. Spatial random field S(x)
+##############################################
+
+
+# project spatial field onto prediction locations
+spatial_pred <- as.vector(Ap %*% res$summary.random$s$mean)
+
+spatial_grid <- data.frame(
+  lon = coop[,1],
+  lat = coop[,2],
+  value = spatial_pred
+)
+
+write.csv(spatial_grid,
+  paste0("Code/Prevalence/Bovine BCT and PCR/Diagnostics_ETH/spatial_field_", iteration-7, ".csv"),
+  row.names = FALSE
+)
+
+##############################################
+# 2. Linear predictor WITHOUT spatial field
+##############################################
+
+
+dp$b0 <- 1
+
+beta <- res$summary.fixed[, "mean"]
+
+eta_fixed <- rep(0, nrow(dp))
+
+for (name in names(beta)) {
+  eta_fixed <- eta_fixed + beta[name] * dp[[name]]
+}
+
+prob_fixed <- plogis(eta_fixed)
+
+write.csv(
+  data.frame(lon = coop[,1], lat = coop[,2], prob_fixed = prob_fixed),
+  paste0("Code/Prevalence/Bovine BCT and PCR/Diagnostics_ETH/fixed_only_prediction_", iteration-7, ".csv"),
+  row.names = FALSE
+)
+
+##############################################
+# 3. Covariate extrapolation check (FIXED)
+##############################################
+
+dp$any_extrapolation <- FALSE
+
+for (cov in covariates) {
+  train_range <- range(data[[cov]], na.rm = TRUE)   # FIXED
+  pred_vals <- dp[[cov]]
+  
+  outside <- pred_vals < train_range[1] | pred_vals > train_range[2]
+  
+  dp$any_extrapolation <- dp$any_extrapolation | outside
+}
+
+write.csv(
+  data.frame(lon = coop[,1], lat = coop[,2], extrapolation = dp$any_extrapolation),
+  paste0("Code/Prevalence/Bovine BCT and PCR/Diagnostics_ETH/extrapolation_", iteration-7, ".csv"),
+  row.names = FALSE
+)
+
+##############################################
+# 4. Distance to nearest data point
+##############################################
+
+distances <- get.knnx(coo, coop, k = 1)$nn.dist[,1]
+dp$dist_to_data <- distances
+
+##############################################
+# 5. Uncertainty measures
+##############################################
+
+dp$pred_mean <- pred_mean
+dp$uncertainty <- pred_ul - pred_ll
+
+##############################################
+# 6. Distance vs uncertainty
+##############################################
+
+write.csv(
+  data.frame(
+    lon = coop[,1],
+    lat = coop[,2],
+    dist_to_data = dp$dist_to_data,
+    uncertainty = dp$uncertainty
+  ),
+  paste0("Code/Prevalence/Bovine BCT and PCR/Diagnostics_ETH/distance_uncertainty_", iteration-7, ".csv"),
+  row.names = FALSE
+)
+
+##############################################
+# 7. Prediction vs uncertainty
+##############################################
+
+write.csv(
+  data.frame(
+    lon = coop[,1],
+    lat = coop[,2],
+    pred_mean = pred_mean,
+    uncertainty = dp$uncertainty
+  ),
+  paste0("Code/Prevalence/Bovine BCT and PCR/Diagnostics_ETH/pred_vs_uncertainty_", iteration-7, ".csv"),
+  row.names = FALSE
+)
+
+##############################################
+# 8. Edge effects (FIXED)
+##############################################
+
+library(sp)
+
+# Ensure border is numeric matrix with 2 columns
+border_clean <- as.matrix(border[,1:2])
+
+border_sp <- SpatialPoints(border_clean)
+pred_sp <- SpatialPoints(coop)
+
+dist_to_edge <- spDists(pred_sp, border_sp)
+dp$dist_to_edge <- apply(dist_to_edge, 1, min)
+
+write.csv(
+  data.frame(
+    lon = coop[,1],
+    lat = coop[,2],
+    dist_to_edge = dp$dist_to_edge,
+    pred_mean = pred_mean
+  ),
+  paste0("Code/Prevalence/Bovine BCT and PCR/Diagnostics_ETH/edge_effects_", iteration-7, ".csv"),
+  row.names = FALSE
+)
+
+##############################################
+# 9. Model without spatial field (FIXED)
+##############################################
+
+cat("Fitting model without spatial field...\n")
+
+formula_nogp <- as.formula(
+  paste0("y ~ 0 + b0 +", paste(covariates, collapse = " + "))
+)
+
+res_nogp <- inla(
+  formula_nogp,
+  data = inla.stack.data(stk.full),
+  family = "binomial", Ntrials = numtrials,
+  control.predictor = list(
+    link = 1,
+    compute = TRUE,
+    A = inla.stack.A(stk.full)
+  )
+)
+
+pred_mean_nogp <- res_nogp$summary.fitted.values[index, "mean"]
+
+write.csv(
+  data.frame(
+    lon = coop[,1],
+    lat = coop[,2],
+    pred_nogp = pred_mean_nogp
+  ),
+  paste0("Code/Prevalence/Bovine BCT and PCR/Diagnostics_ETH/no_spatial_model_", iteration-7, ".csv"),
+  row.names = FALSE
+)
+
+cat("Diagnostics complete.\n")
   
   # Create results data frame
   dpm <- rbind(

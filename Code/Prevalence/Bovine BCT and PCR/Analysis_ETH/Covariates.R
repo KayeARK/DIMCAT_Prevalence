@@ -6,8 +6,8 @@ covariates_all<-c("elevation","precipitation","human_fp","pop_den","tree","grass
 
 covariates_present <-  rep(0, length(covariates_all))
 
-for (i in 1:200){
-data <- read.csv(paste0("Code/Prevalence/Bovine BCT and PCR/Covariates_ETH/Covariates_model_",i,".csv"))
+for (i in 1:138){
+data <- read.csv(paste0("Code/Prevalence/Bovine BCT and PCR/Covariates_ETH_better_mesh/Covariates_model_",i,".csv"))
 covariates <- data[,1]
 
 #compare covariates to covariates_all, if there, add a 1 to covariates_present

@@ -105,7 +105,7 @@ tryCatch({
 })
 
 # Load and average all projection files in Projections_ETH directory
-projections_dir <- "Code/Prevalence/Bovine BCT and PCR/Projections_ETH/"
+projections_dir <- "Code/Prevalence/Bovine BCT and PCR/Projections_ETH_better_mesh/"
 projection_files <- list.files(projections_dir, pattern = "Projections_model_.*\\.csv", full.names = TRUE)
 
 cat("Found", length(projection_files), "projection files to average\n")
@@ -486,7 +486,7 @@ create_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bo
                            labels = c("10", "50", "100", "200+")) +
       # Add color scale for test types
       scale_color_manual(name = "Test type",
-                        values = c("HCT/BCT" = "#00FFFF", "PCR" = "#FF6347"),  # Bright cyan and tomato - distinct colors with high contrast
+                        values = c("HCT/BCT" = "#00FFFF", "PCR" = "#FF6347"),
                         guide = guide_legend(override.aes = list(size = 3, alpha = 0.8)))
   }
   
@@ -517,9 +517,145 @@ lga_prevalence_lower <- zone_prevalence_lower
 lga_prevalence_upper <- zone_prevalence_upper
 
 # Create choropleth maps - mean map first, then percentile maps with bovine data overlay
-p_mean <- create_choropleth(zone_prevalence_mean, "(mean)", data_type = "mean", add_bovine = TRUE, show_uncertainty = TRUE, add_inset = TRUE)
-p_lower <- create_choropleth(zone_prevalence_lower, "(2.5th percentile)", data_type = "lower", add_bovine = TRUE, show_uncertainty = TRUE)
-p_upper <- create_choropleth(zone_prevalence_upper, "(97.5th percentile)", data_type = "upper", add_bovine = TRUE, show_uncertainty = TRUE)
+p_mean <- create_choropleth(zone_prevalence_mean, "(mean)", data_type = "mean", add_bovine = TRUE, show_uncertainty = FALSE, add_inset = TRUE)
+p_lower <- create_choropleth(zone_prevalence_lower, "(2.5th percentile)", data_type = "lower", add_bovine = TRUE, show_uncertainty = FALSE)
+p_upper <- create_choropleth(zone_prevalence_upper, "(97.5th percentile)", data_type = "upper", add_bovine = TRUE, show_uncertainty = FALSE)
+
+# Create transparent background versions with custom font color
+font_color <- "#EEE5D4"
+
+# Function to create transparent choropleth map
+create_transparent_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bovine = FALSE, show_uncertainty = FALSE, add_inset = FALSE) {
+  
+  # Handle the different data types (same as original function)
+  if(data_type == "mean") {
+    fill_column <- "mean_prevalence"
+  } else if(data_type == "lower") {
+    fill_column <- "lower_prevalence"  
+  } else if(data_type == "upper") {
+    fill_column <- "upper_prevalence"
+  } else {
+    fill_column <- data_type
+  }
+  
+  # Join zone-level prevalence back to zone polygons (same as original)
+  ethiopia_zones_final <- ethiopia_zones_sf %>%
+    left_join(lga_data %>% st_drop_geometry() %>% dplyr::select(GID_3, all_of(fill_column)), 
+              by = "GID_3")
+  
+  # Add uncertainty information if requested (same as original)
+  if(show_uncertainty) {
+    ethiopia_zones_final <- ethiopia_zones_final %>%
+      left_join(zone_uncertainty, by = "GID_3")
+  }
+  
+  # Create zone-level choropleth map
+  p <- ggplot(ethiopia_zones_final)
+  
+  # Skip neighboring countries for transparent version - cleaner look
+  
+  # Add Ethiopia zones with prevalence data (same dynamic column as original)
+  p <- p + 
+    geom_sf(aes(fill = !!sym(fill_column)), lwd = 0.1, color = "white") +
+    geom_sf(data = ethiopia_regions_sf, fill = NA, color = font_color, lwd = 0.5)
+  
+  # Add high uncertainty overlay if requested (same as original)
+  if(show_uncertainty && "high_uncertainty" %in% names(ethiopia_zones_final)) {
+    high_uncertainty_zones <- ethiopia_zones_final %>% 
+      dplyr::filter(high_uncertainty == TRUE)
+    
+    if(nrow(high_uncertainty_zones) > 0) {
+      p <- p + 
+        geom_sf(data = high_uncertainty_zones, fill = "white", alpha = 0.4, 
+                color = "red", lwd = 0.3)
+    }
+  }
+  
+  # Add bovine data points if requested
+  if(add_bovine) {
+    p <- p + geom_point(data = st_drop_geometry(bovine_ethiopia_sf), 
+                       aes(x = lon, y = lat, size = Number_of_animal_tested, color = Test_Type),
+                       alpha = 0.8)
+  }
+  
+  p <- p +
+    scale_fill_viridis_c(
+      name = "AAT\nprevalence",
+      na.value = "grey90",
+      direction = 1,
+      option = "viridis",
+      limits = c(0, 1),
+      trans = "sqrt",
+      labels = scales::percent_format(accuracy = 0.1)
+    )
+  
+  # Add uncertainty legend if high uncertainty areas exist
+  if(show_uncertainty && "high_uncertainty" %in% names(ethiopia_zones_final) && 
+     any(ethiopia_zones_final$high_uncertainty, na.rm = TRUE)) {
+    p <- p + 
+      labs(caption = "Areas with white overlay and red border indicate high uncertainty (CI width > 0.80)")
+  }
+  
+  # Add additional scales for bovine data if included
+  if(add_bovine) {
+    p <- p +
+      scale_size_continuous(name = "Sample size", 
+                           range = c(1, 6),
+                           breaks = c(10, 50, 100, 200),
+                           labels = c("10", "50", "100", "200+")) +
+      scale_color_manual(name = "Test type",
+                        values = c("HCT/BCT" = "#00FFFF", "PCR" = "#FF6347"),
+                        guide = guide_legend(override.aes = list(size = 3, alpha = 0.8)))
+  }
+  
+  p <- p +
+    # Add scale bar and north arrow with custom colors
+    annotation_scale(location = "bl", width_hint = 0.3, text_cex = 0.8, 
+                    bar_cols = c(font_color, "white"), line_width = 1, 
+                    text_col = font_color) +
+    annotation_north_arrow(location = "bl", which_north = "true", 
+                          pad_x = unit(0.3, "in"), pad_y = unit(0.3, "in"),
+                          style = north_arrow_fancy_orienteering(text_size = 8, 
+                                                                text_col = font_color,
+                                                                line_col = font_color,
+                                                                fill = font_color)) +
+    theme_void() +
+    labs(
+      title = paste("AAT prevalence by zone in Ethiopia", title_suffix)
+    ) +
+    theme(
+      panel.background = element_rect(fill = "transparent", color = NA),
+      plot.background = element_rect(fill = "transparent", color = NA),
+      plot.title = element_text(hjust = 0.5, size = 26, face = "bold", color = font_color),
+      plot.subtitle = element_text(hjust = 0.5, size = 11, color = font_color),
+      plot.caption = element_text(hjust = 0.5, size = 9, color = font_color),
+      legend.position = "right",
+      legend.key.height = unit(1.5, "cm"),
+      legend.key.width = unit(0.5, "cm"),
+      legend.text = element_text(color = font_color),
+      legend.title = element_text(color = font_color),
+      legend.background = element_rect(fill = "transparent", color = NA),
+      legend.key = element_rect(fill = "transparent", color = NA),
+      legend.box.background = element_rect(fill = "transparent", color = NA)
+    )
+  
+  # Add extra spacing between legends if bovine data is included
+  if(add_bovine) {
+    p <- p + theme(
+      legend.spacing.y = unit(1, "cm"),
+      legend.box.spacing = unit(1, "cm")
+    )
+  }
+  
+  # Skip inset map for transparent version - cleaner look
+  
+  return(p)
+}
+
+# Create transparent versions of all three choropleth maps
+p_mean_transparent <- create_transparent_choropleth(zone_prevalence_mean, "(mean)", data_type = "mean", add_bovine = TRUE, show_uncertainty = TRUE, add_inset = TRUE)
+p_lower_transparent <- create_transparent_choropleth(zone_prevalence_lower, "(2.5th percentile)", data_type = "lower", add_bovine = TRUE, show_uncertainty = TRUE)
+p_upper_transparent <- create_transparent_choropleth(zone_prevalence_upper, "(97.5th percentile)", data_type = "upper", add_bovine = TRUE, show_uncertainty = TRUE)
 
 # Create combined histogram and boxplot for each estimate type
 create_combined_plot <- function(lga_data, estimate_name) {
@@ -605,6 +741,11 @@ ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_mean.pdf"
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_lower.pdf", plot = p_lower, width = 12, height = 10, dpi = 150)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_upper.pdf", plot = p_upper, width = 12, height = 10, dpi = 150)
 
+# Save transparent versions of choropleth maps
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_mean_transparent.pdf", plot = p_mean_transparent, width = 12, height = 10, dpi = 150, bg = "transparent")
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_lower_transparent.pdf", plot = p_lower_transparent, width = 12, height = 10, dpi = 150, bg = "transparent")
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_choropleth_upper_transparent.pdf", plot = p_upper_transparent, width = 12, height = 10, dpi = 150, bg = "transparent")
+
 # Save combined plots (histogram + boxplot for each estimate type) - more compact dimensions
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_mean_analysis.pdf", plot = p_mean_combined, width = 10, height = 6, dpi = 150)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_lower_analysis.pdf", plot = p_lower_combined, width = 10, height = 6, dpi = 150)
@@ -614,6 +755,12 @@ ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/eth_upper_analysis.pdf",
 print(p_mean)
 print(p_lower) 
 print(p_upper)
+
+# Display transparent versions
+print(p_mean_transparent)
+print(p_lower_transparent)
+print(p_upper_transparent)
+
 grid.draw(p_mean_combined)
 grid.draw(p_lower_combined)
 grid.draw(p_upper_combined)

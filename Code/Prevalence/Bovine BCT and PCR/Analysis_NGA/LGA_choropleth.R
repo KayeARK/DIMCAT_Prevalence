@@ -99,7 +99,7 @@ tryCatch({
 })
 
 # Load and average all projection files in Projections_NGA directory
-projections_dir <- "Code/Prevalence/Bovine BCT and PCR/Projections_NGA/"
+projections_dir <- "Code/Prevalence/Bovine BCT and PCR/Projections_NGA_better_mesh/"
 projection_files <- list.files(projections_dir, pattern = "Projections_model_.*\\.csv", full.names = TRUE)
 
 cat("Found", length(projection_files), "projection files to average\n")
@@ -262,7 +262,7 @@ lga_uncertainty <- lga_prevalence_lower %>%
   left_join(lga_prevalence_upper %>% dplyr::select(GID_2, upper = lga_prevalence), by = "GID_2") %>%
   dplyr::mutate(
     ci_width = upper - lower,
-    high_uncertainty = ci_width > 0.80
+    high_uncertainty = ci_width > 0.8
   )
 
 cat("LGAs with high uncertainty (CI width > 0.80):", sum(lga_uncertainty$high_uncertainty), "out of", nrow(lga_uncertainty), "\n")
@@ -470,6 +470,149 @@ p_mean <- create_choropleth(lga_prevalence_mean, "(mean)", add_bovine_data = TRU
 p_lower <- create_choropleth(lga_prevalence_lower, "(2.5th percentile)", add_bovine_data = TRUE, show_uncertainty = TRUE)
 p_upper <- create_choropleth(lga_prevalence_upper, "(97.5th percentile)", add_bovine_data = TRUE, show_uncertainty = TRUE)
 
+# Create transparent background versions with custom font color
+font_color <- "#EEE5D4"
+
+# Function to create transparent choropleth map
+create_transparent_choropleth <- function(lga_data, title_suffix, add_bovine_data = FALSE, show_uncertainty = FALSE, add_inset = FALSE) {
+  # Join LGA-level prevalence back to LGA polygons
+  nigeria_lgas_final <- nigeria_lgas_sf %>%
+    left_join(lga_data, by = "GID_2")
+  
+  # Add uncertainty information if requested
+  if(show_uncertainty) {
+    nigeria_lgas_final <- nigeria_lgas_final %>%
+      left_join(lga_uncertainty, by = "GID_2")
+  }
+  
+  # Create LGA-level choropleth map
+  p <- ggplot(nigeria_lgas_final)
+  
+  # Add neighboring countries as background context (if available)
+  if(!is.null(neighboring_countries_sf)) {
+    p <- p + geom_sf(data = neighboring_countries_sf, fill = "grey95", color = "grey80", lwd = 0.3)
+  }
+  
+  # Add Nigeria LGAs with prevalence data
+  p <- p + 
+    geom_sf(aes(fill = lga_prevalence), lwd = 0.1, color = "white") +
+    geom_sf(data = nigeria_states_sf, fill = NA, color = font_color, lwd = 0.5)
+  
+  # Add high uncertainty overlay if requested
+  if(show_uncertainty && "high_uncertainty" %in% names(nigeria_lgas_final)) {
+    high_uncertainty_lgas <- nigeria_lgas_final %>% 
+      dplyr::filter(high_uncertainty == TRUE)
+    
+    if(nrow(high_uncertainty_lgas) > 0) {
+      p <- p + 
+        geom_sf(data = high_uncertainty_lgas, fill = "white", alpha = 0.4, 
+                color = "red", lwd = 0.3)
+    }
+  }
+  
+  # Add bovine data points if requested (only for percentile plots)
+  if(add_bovine_data) {
+    p <- p + geom_point(data = st_drop_geometry(bovine_nigeria_sf), 
+                       aes(x = lon, y = lat, size = Number_of_animal_tested, color = Test_Type),
+                       alpha = 0.8)
+  }
+  
+  p <- p +
+    scale_fill_viridis_c(
+      name = "AAT\nprevalence",
+      na.value = "grey90",
+      direction = 1,
+      option = "viridis",
+      limits = c(0, 1),
+      trans = "sqrt",
+      labels = scales::percent_format(accuracy = 0.1)
+    )
+  
+  # Add uncertainty legend if high uncertainty areas exist
+  if(show_uncertainty && "high_uncertainty" %in% names(nigeria_lgas_final) && 
+     any(nigeria_lgas_final$high_uncertainty, na.rm = TRUE)) {
+    p <- p + 
+      labs(caption = "Areas with white overlay and red border indicate high uncertainty (CI width > 0.80)")
+  }
+  
+  # Add additional scales for bovine data if included
+  if(add_bovine_data) {
+    p <- p +
+      scale_size_continuous(name = "Sample size", 
+                           range = c(1, 6),
+                           breaks = c(10, 50, 100, 200),
+                           labels = c("10", "50", "100", "200+")) +
+      scale_color_manual(name = "Test type",
+                        values = c("BCT" = "#00FFFF", "PCR" = "#FF6347"),
+                        guide = guide_legend(override.aes = list(size = 3, alpha = 0.8)))
+  }
+  
+  p <- p +
+    # Add scale bar and north arrow with custom colors
+    annotation_scale(location = "bl", width_hint = 0.3, text_cex = 0.8, 
+                    bar_cols = c(font_color, "white"), line_width = 1, 
+                    text_col = font_color) +
+    annotation_north_arrow(location = "bl", which_north = "true", 
+                          pad_x = unit(0.3, "in"), pad_y = unit(0.3, "in"),
+                          style = north_arrow_fancy_orienteering(text_size = 8, 
+                                                                text_col = font_color,
+                                                                line_col = font_color,
+                                                                fill = font_color)) +
+    theme_void() +
+    labs(
+      title = paste("AAT prevalence by LGA in Nigeria", title_suffix)
+    ) +
+    theme(
+      panel.background = element_rect(fill = "transparent", color = NA),
+      plot.background = element_rect(fill = "transparent", color = NA),
+      plot.title = element_text(hjust = 0.5, size = 26, face = "bold", color = font_color),
+      plot.subtitle = element_text(hjust = 0.5, size = 11, color = font_color),
+      plot.caption = element_text(hjust = 0.5, size = 9, color = font_color),
+      legend.position = "right",
+      legend.key.height = unit(1.5, "cm"),
+      legend.key.width = unit(0.5, "cm"),
+      legend.text = element_text(color = font_color),
+      legend.title = element_text(color = font_color),
+      legend.background = element_rect(fill = "transparent", color = NA),
+      legend.key = element_rect(fill = "transparent", color = NA),
+      legend.box.background = element_rect(fill = "transparent", color = NA)
+    )
+  
+  # Add extra spacing between legends if bovine data is included
+  if(add_bovine_data) {
+    p <- p + theme(
+      legend.spacing.y = unit(1, "cm"),
+      legend.box.spacing = unit(1, "cm")
+    )
+  }
+  
+  # Add inset map if requested and data is available
+  if(add_inset && !is.null(africa_countries_sf) && !is.null(nigeria_country_sf)) {
+    # Create inset map showing Nigeria's location in Africa
+    inset_plot <- ggplot() +
+      geom_sf(data = africa_countries_sf, fill = "grey90", color = "white", size = 0.1) +
+      geom_sf(data = nigeria_country_sf, fill = "#440154", color = "white", size = 0.3) +
+      theme_void() +
+      theme(
+        panel.background = element_rect(fill = "transparent", color = font_color, size = 0.5),
+        plot.background = element_rect(fill = "transparent", color = NA),
+        plot.margin = margin(2.1, 2.1, 2.1, 2.1)
+      ) +
+      coord_sf(expand = FALSE)
+    
+    # Combine main plot with inset using cowplot
+    p <- ggdraw(p) +
+      draw_plot(inset_plot, x = 0.70, y = 0.02, width = 0.25, height = 0.25)
+  }
+  
+  return(p)
+}
+
+# Create transparent versions of all three choropleth maps
+p_mean_transparent <- create_transparent_choropleth(lga_prevalence_mean, "(mean)", add_bovine_data = TRUE, show_uncertainty = TRUE, add_inset = TRUE)
+p_lower_transparent <- create_transparent_choropleth(lga_prevalence_lower, "(2.5th percentile)", add_bovine_data = TRUE, show_uncertainty = TRUE)
+p_upper_transparent <- create_transparent_choropleth(lga_prevalence_upper, "(97.5th percentile)", add_bovine_data = TRUE, show_uncertainty = TRUE)
+
 # Create combined histogram and boxplot for each estimate type
 create_combined_plot <- function(lga_data, estimate_name) {
   # Histogram with viridis color scale matching choropleth
@@ -551,6 +694,11 @@ ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_mean.pdf"
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_lower.pdf", plot = p_lower, width = 12, height = 10, dpi = 150)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_upper.pdf", plot = p_upper, width = 12, height = 10, dpi = 150)
 
+# Save transparent versions of choropleth maps
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_mean_transparent.pdf", plot = p_mean_transparent, width = 12, height = 10, dpi = 150, bg = "transparent")
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_lower_transparent.pdf", plot = p_lower_transparent, width = 12, height = 10, dpi = 150, bg = "transparent")
+ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_choropleth_upper_transparent.pdf", plot = p_upper_transparent, width = 12, height = 10, dpi = 150, bg = "transparent")
+
 # Save combined plots (histogram + boxplot for each estimate type) - more compact dimensions
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_mean_analysis.pdf", plot = p_mean_combined, width = 10, height = 6, dpi = 150)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_lower_analysis.pdf", plot = p_lower_combined, width = 10, height = 6, dpi = 150)
@@ -560,6 +708,12 @@ ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_upper_analysis.pdf",
 print(p_mean)
 print(p_lower) 
 print(p_upper)
+
+# Display transparent versions
+print(p_mean_transparent)
+print(p_lower_transparent)
+print(p_upper_transparent)
+
 grid.draw(p_mean_combined)
 grid.draw(p_lower_combined)
 grid.draw(p_upper_combined)

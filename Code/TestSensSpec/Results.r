@@ -124,5 +124,87 @@ ggsave("Code/TestSensSpec/mcmc_trace.pdf", width = 8, height = 6)
 print(fit, pars = c("Se_pcr","Sp_pcr","Se_hct","Sp_hct","mu","sigma"), 
       digits_summary = 10)
 
+  
+#THIS CREATES PLOTS WITH A TRANSPARENT BACKGROUND FOR USE IN A POSTER
+
+# Create identical plots with transparent background and custom font color
+font_color <- "#EEE5D4"
+
+# Recreate sensitivity plot with transparent background and custom font color
+df_post_sens <- melt(df_plot[, c("Se_pcr", "Se_hct")])
+df_all_sens <- rbind(df_post_sens, df_prior)
+
+p1_transparent <- ggplot(df_all_sens, aes(x = value, color = variable, fill = variable)) +
+  geom_density(alpha = 0.35) +
+  scale_color_manual(
+    name = "",
+    values = c("Se_pcr" = "#FFAA00", "Se_hct" = "#00FFFF", "Prior" = "#00FF00"),
+    labels = c("Se_pcr" = "PCR",
+               "Se_hct" = "BCT/HCT",
+               "Prior" = "Prior")
+  ) +
+  scale_fill_manual(
+    name = "",
+    values = c("Se_pcr" = "#FFAA00", "Se_hct" = "#00FFFF", "Prior" = "#00FF00"),
+    labels = c("Se_pcr" = "PCR",
+               "Se_hct" = "BCT/HCT",
+               "Prior" = "Prior")
+  ) +
+  labs(title = "",
+       x = "Sensitivity", y = "Density") +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "transparent", color = NA),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = font_color),
+    axis.title = element_text(size = 16, color = font_color),
+    axis.text = element_text(size = 14, color = font_color),
+    legend.text = element_text(size = 14, color = font_color),
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.key = element_rect(fill = "transparent", color = NA)
+  )
+ggsave("Code/TestSensSpec/sensitivity_density_transparent.pdf", plot = p1_transparent, 
+       width = 8, height = 6, bg = "transparent")
+
+# Recreate specificity plot with transparent background and custom font color
+df_post_spec <- melt(df_plot[, c("Sp_pcr", "Sp_hct")])
+
+p2_transparent <- ggplot(df_post_spec, aes(x = value, color = variable, fill = variable)) +
+  geom_density(alpha = 0.35) +
+  scale_color_manual(
+    name = "",
+    values = c("Sp_pcr" = "#FFAA00", "Sp_hct" = "#00FFFF"),
+    labels = c("Sp_pcr" = "PCR",
+               "Sp_hct" = "BCT/HCT")
+  ) +
+  scale_fill_manual(
+    name = "",
+    values = c("Sp_pcr" = "#FFAA00", "Sp_hct" = "#00FFFF"),
+    labels = c("Sp_pcr" = "PCR",
+               "Sp_hct" = "BCT/HCT")
+  ) +
+  labs(title = "",
+       x = "Specificity", y = "Density") +
+  coord_cartesian(xlim = c(0.98, 1)) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "transparent", color = NA),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = font_color),
+    axis.title = element_text(size = 16, color = font_color),
+    axis.text = element_text(size = 14, color = font_color),
+    legend.text = element_text(size = 14, color = font_color),
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.key = element_rect(fill = "transparent", color = NA)
+  )
+
+print(p2_transparent)
+ggsave("Code/TestSensSpec/specificity_density_transparent.pdf", plot = p2_transparent, 
+       width = 8, height = 6, bg = "transparent")
+
 
 

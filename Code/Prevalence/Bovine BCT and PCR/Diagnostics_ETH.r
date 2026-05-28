@@ -9,8 +9,13 @@ library(afrilearndata)
 library(concaveman)
 library(geodata)
 library(raster)
+library(FNN)
 
-countries_to_infer=c("Nigeria")
+n_iterations <- 5
+
+diagnostics_initialised <- FALSE
+
+countries_to_infer=c("Ethiopia")
 
 #add string to the name of the file
 
@@ -45,7 +50,7 @@ cat("Reduced from", nrow(data_original), "to", nrow(coord_sample_mapping), "reco
 
 #i should go from 8 to 1007
 
-for (iteration in (1+7):(1+7)){
+for (iteration in (1+7):(1+7+n_iterations-1)){
 print(iteration-7)
 
 # Extract positive cases from original data for this iteration
@@ -77,69 +82,69 @@ data <- data.frame(
 
 
 #ELEVATION
-r_elv <- elevation_30s(country = "NGA", path = "Data/Covariates")
-data$elevation<-terra::extract(r_elv, data[, c("longitude", "latitude")])$NGA_elv_msk
+r_elv <- elevation_30s(country = "ETH", path = "Data/Covariates")
+data$elevation<-terra::extract(r_elv, data[, c("longitude", "latitude")])$ETH_elv_msk
 
 #PRECIPITATION
-r_prec<- worldclim_country(country = "NGA",path = "Data/Covariates", var = "prec")
-data$precipitation<-(terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_1+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_2+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_3+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_4+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_5+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_6+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_7+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_8+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_9+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_10+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_11+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_prec_12)/12
+r_prec<- worldclim_country(country = "ETH",path = "Data/Covariates", var = "prec")
+data$precipitation<-(terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_1+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_2+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_3+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_4+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_5+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_6+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_7+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_8+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_9+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_10+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_11+
+terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_12)/12
 
 
 #AVERAGE TEMPERATURE
-r_tavg<- worldclim_country(country = "NGA",path = "Data/Covariates", var = "tavg")
-data$tavg<-(terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_1+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_2+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_3+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_4+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_5+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_6+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_7+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_8+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_9+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_10+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_11+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tavg_12)/12
+r_tavg<- worldclim_country(country = "ETH",path = "Data/Covariates", var = "tavg")
+data$tavg<-(terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_1+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_2+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_3+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_4+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_5+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_6+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_7+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_8+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_9+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_10+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_11+
+terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_12)/12
 
 #MINIMUM TEMPERATURE
-r_tmin<- worldclim_country(country = "NGA",path = "Data/Covariates", var = "tmin")
-data$tmin<-(terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_1+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_2+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_3+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_4+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_5+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_6+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_7+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_8+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_9+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_10+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_11+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmin_12)/12
+r_tmin<- worldclim_country(country = "ETH",path = "Data/Covariates", var = "tmin")
+data$tmin<-(terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_1+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_2+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_3+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_4+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_5+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_6+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_7+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_8+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_9+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_10+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_11+
+terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_12)/12
 
 #MAXIMUM TEMPERATURE
-r_tmax<- worldclim_country(country = "NGA",path = "Data/Covariates", var = "tmax")
-data$tmax<-(terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_1+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_2+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_3+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_4+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_5+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_6+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_7+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_8+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_9+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_10+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_11+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$NGA_wc2.1_30s_tmax_12)/12
+r_tmax<- worldclim_country(country = "ETH",path = "Data/Covariates", var = "tmax")
+data$tmax<-(terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_1+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_2+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_3+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_4+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_5+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_6+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_7+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_8+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_9+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_10+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_11+
+terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_12)/12
 
 #POPULATION DENSITY
 r_pop_den <- population(year=2010, res=0.5, path="Data/Covariates")
@@ -461,30 +466,8 @@ stk.p <- inla.stack(
 # stk.full has stk.e and stk.p
 stk.full <- inla.stack(stk.e, stk.p)
 
-covariates<-c("elevation","precipitation","tavg","tmax","human_fp","pop_den","tree","grassland",
-"shrub","cropland","built","bare","water","wetland","mangrove","cattle","tsetse")
-
-cov_temp<-c()
-for (i in seq_along(covariates)){
-  col_number <- which(colnames(dp) == covariates[i])
-  x=!is.na(dp[,col_number])
-  if (max(dp[,col_number][x])>0){
-    cov_temp <- c(cov_temp,covariates[i])
-  }
-}
-
-covariates<-cov_temp
-
-full_covariates<-covariates
-
-waic_threshold<-2
-
-waic_increase<--1
-waic_refs<-c()
-iteration_count <- 1
-
-while (min(waic_increase)<waic_threshold && length(covariates)>0){
-
+cov_file <- paste0("Code/Prevalence/Bovine BCT and PCR/Covariates_ETH/","Covariates_model_", iteration-7, ".csv")
+covariates <- read.csv(cov_file)$covariates
 
 formula <- as.formula(paste0("y ~ 0 + b0 +",paste(covariates, collapse = " + "),"+ f(s, model = spde)"))
 
@@ -495,203 +478,237 @@ res <- inla(formula,
   control.predictor = list(link=1,compute = TRUE,
   A = inla.stack.A(stk.full)),)
 
-waic_ref<-res$waic$waic
-waic_refs<-c(waic_refs,waic_ref)
 
-waic_values <- rep(0, length(covariates))
+  #### DIAGNOSTICS ####
 
-for (i in seq_along(covariates)){
-  remaining_covs <- covariates[-i]
-  formula <- as.formula(paste0("y ~ 0 + b0 +",paste(remaining_covs, collapse = " + "),"+ f(s, model = spde)"))
+  ############################################################
+################ INITIALISE STORAGE ########################
+############################################################
 
-  res <- inla(formula,
-    data = inla.stack.data(stk.full),
-    family = "binomial", Ntrials = numtrials,
-    control.compute=list(return.marginals.predictor=TRUE, dic=TRUE, waic=TRUE),
-    control.predictor = list(link=1,compute = TRUE,
-    A = inla.stack.A(stk.full)),)
+if(!diagnostics_initialised){
 
-  waic_values[i] <- res$waic$waic
+  n_pred <- nrow(coop)
+
+  sum_prev_mean <- rep(0, n_pred)
+  sum_prev_var  <- rep(0, n_pred)
+
+  sum_eta_mean <- rep(0, n_pred)
+  sum_eta_var  <- rep(0, n_pred)
+
+  sum_spatial_mean <- rep(0, n_pred)
+  sum_spatial_var  <- rep(0, n_pred)
+
+  sum_nogp <- rep(0, n_pred)
+
+  ##########################################################
+  ################ DISTANCE TO DATA ########################
+  ##########################################################
+
+  dist_to_data <- get.knnx(
+    coo,
+    coop,
+    k = 1
+  )$nn.dist[,1]
+
+  diagnostics_initialised <- TRUE
 }
 
-waic_increase <- waic_values - waic_ref
+############################################################
+################ PREDICTION INDEX ##########################
+############################################################
 
-#if maximum value of waic_increase is greater than 1 remove covariate
-if(min(waic_increase)<waic_threshold){
-  covariates <- covariates[-which.min(waic_increase)]
-}
-iteration_count <- iteration_count + 1
-}
+index <- inla.stack.index(
+  stk.full,
+  tag = "pred"
+)$data
 
-#remove values in full_covariates that are in covariates
-if (length(covariates)>0){
-for (i in seq_along(covariates)){
-  full_covariates <- full_covariates[-which(full_covariates==covariates[i])]
-}
-}
+############################################################
+################ PREVALENCE DIAGNOSTICS ####################
+############################################################
 
-waic_increase<--1
-forward_iteration <- 1
-while (min(waic_increase)<0 && length(full_covariates)>0){
+pred_mean <- res$summary.fitted.values[
+  index,
+  "mean"
+]
 
-if(length(full_covariates)==0){
-  break
-}
+pred_sd <- res$summary.fitted.values[
+  index,
+  "sd"
+]
 
-waic_values <- rep(0, length(full_covariates))
-for (i in seq_along(full_covariates)){
-  formula <- as.formula(paste0("y ~ 0 + b0 +",paste(c(covariates,full_covariates[i]), collapse = " + "),"+ f(s, model = spde)"))
-  res <- inla(formula,
-    data = inla.stack.data(stk.full),
-    family = "binomial", Ntrials = numtrials,
-    control.compute=list(return.marginals.predictor=TRUE, dic=TRUE, waic=TRUE),
-    control.predictor = list(link=1,compute = TRUE,
-    A = inla.stack.A(stk.full)),)
+sum_prev_mean <- sum_prev_mean + pred_mean
 
-  waic_values[i] <- res$waic$waic
-}
+sum_prev_var <- sum_prev_var + pred_sd^2
 
-waic_increase <- waic_values - waic_ref
+############################################################
+################ LATENT LINEAR PREDICTOR ###################
+############################################################
 
-if((min(waic_increase))< -0.001){
-  covariates <- c(covariates,full_covariates[which.min(waic_increase)])
-}
-full_covariates <- full_covariates[-which.min(waic_increase)]
-forward_iteration <- forward_iteration + 1
+eta_mean <- res$summary.linear.predictor[
+  index,
+  "mean"
+]
 
-formula <- as.formula(paste0("y ~ 0 + b0 +",paste(covariates, collapse = " + "),"+ f(s, model = spde)"))
-res <- inla(formula,
-  data = inla.stack.data(stk.full),
-  family = "binomial", Ntrials = numtrials,
-  control.compute=list(return.marginals.predictor=TRUE, dic=TRUE, waic=TRUE),
-  control.predictor = list(link=1,compute = TRUE,
-  A = inla.stack.A(stk.full)),)
+eta_sd <- res$summary.linear.predictor[
+  index,
+  "sd"
+]
 
-waic_ref<-res$waic$waic
-waic_refs<-c(waic_refs,waic_ref)
-}
+sum_eta_mean <- sum_eta_mean + eta_mean
 
+sum_eta_var <- sum_eta_var + eta_sd^2
 
-### PERFORM REMOVAL STEP ONE LAST TIME
+############################################################
+################ SPATIAL FIELD #############################
+############################################################
 
-cov_temp<-c()
-for (i in seq_along(covariates)){
-  col_number <- which(colnames(dp) == covariates[i])
-  x=!is.na(dp[,col_number])
-  if (max(dp[,col_number][x])>0){
-    cov_temp <- c(cov_temp,covariates[i])
-  }
-}
+spatial_mean <- as.vector(
+  Ap %*%
+  res$summary.random$s$mean
+)
 
-covariates<-cov_temp
-
-full_covariates<-covariates
-
-waic_threshold<-0.01
-
-waic_increase<--0.001
-final_iteration <- 1
-while (min(waic_increase)<waic_threshold && length(covariates)>0){
-
-formula <- as.formula(paste0("y ~ 0 + b0 +",paste(covariates, collapse = " + "),"+ f(s, model = spde)"))
-
-res <- inla(formula,
-  data = inla.stack.data(stk.full),
-  family = "binomial", Ntrials = numtrials,
-  control.compute=list(return.marginals.predictor=TRUE, dic=TRUE, waic=TRUE),
-  control.predictor = list(link=1,compute = TRUE,
-  A = inla.stack.A(stk.full)),)
-
-waic_ref<-res$waic$waic
-waic_refs<-c(waic_refs,waic_ref)
-
-waic_values <- rep(0, length(covariates))
-
-for (i in seq_along(covariates)){
-  formula <- as.formula(paste0("y ~ 0 + b0 +",paste(covariates[-i], collapse = " + "),"+ f(s, model = spde)"))
-
-  res <- inla(formula,
-    data = inla.stack.data(stk.full),
-    family = "binomial", Ntrials = numtrials,
-    control.compute=list(return.marginals.predictor=TRUE, dic=TRUE, waic=TRUE),
-    control.predictor = list(link=1,compute = TRUE,
-    A = inla.stack.A(stk.full)),)
-
-  waic_values[i] <- res$waic$waic
-}
-
-waic_increase <- waic_values - waic_ref
-#if maximum value of waic_increase is greater than 1 remove covariate
-if(min(waic_increase)<waic_threshold){
-  covariates <- covariates[-which.min(waic_increase)]
-}
-}
-
-
-#save covariates and waic_increase to a csv file
-write.csv(data.frame(covariates,waic_increase), paste0("Code/Prevalence/Bovine BCT and PCR/WAIC_increase_NGA/WAIC_increase_model_",iteration-7,".csv"), row.names = FALSE)
-
-
-
-
-index <- inla.stack.index(stk.full, tag = "pred")$data
-
-pred_mean <- res$summary.fitted.values[index, "mean"]
-pred_ll <- res$summary.fitted.values[index, "0.025quant"]
-pred_ul <- res$summary.fitted.values[index, "0.975quant"]
-
-# plot
-
-dpm <- rbind(
-  data.frame(
-    Latitude = coop[, 1], Longitude = coop[, 2],
-    value = pred_mean, variable = "Mean"
-  ),
-  data.frame(
-    Latitude = coop[, 1], Longitude = coop[, 2],
-    value = pred_ll, variable = "2.5th percentile"
-  ),
-  data.frame(
-    Latitude = coop[, 1], Longitude = coop[, 2],
-    value = pred_ul, variable = "97.5th percentile"
+spatial_sd <- sqrt(
+  as.vector(
+    (Ap^2) %*%
+    (res$summary.random$s$sd^2)
   )
 )
-dpm$variable <- as.factor(dpm$variable)
 
-#write covatriates to a csv labelled with iteration
-write.csv(data.frame(covariates), paste0("Code/Prevalence/Bovine BCT and PCR/Covariates_NGA/Covariates_model_",iteration-7,".csv"), row.names = FALSE)
-#write dpm to a csv labelled with iteration
-write.csv(dpm, paste0("Code/Prevalence/Bovine BCT and PCR/Projections_NGA/Projections_model_",iteration-7,".csv"), row.names = FALSE)
-}
-#write.csv(waic_refs, paste0("Code/Prevalence/Bovine BCT/Results/",countries_to_infer,"/",countries_to_infer,"WAICs.csv"), row.names = FALSE)
-#write.csv(covariates, paste0("Code/Prevalence/Bovine BCT/Results/",countries_to_infer,"/",countries_to_infer,"Covariates.csv"), row.names = FALSE)
+sum_spatial_mean <-
+  sum_spatial_mean + spatial_mean
 
+sum_spatial_var <-
+  sum_spatial_var + spatial_sd^2
 
+############################################################
+################ NO-SPATIAL MODEL ##########################
+############################################################
 
-# plot
-
-dpm <- rbind(
-  data.frame(
-    Latitude = coop[, 1], Longitude = coop[, 2],
-    value = pred_mean, variable = "Mean"
-  ),
-  data.frame(
-    Latitude = coop[, 1], Longitude = coop[, 2],
-    value = pred_ll, variable = "2.5th percentile"
-  ),
-  data.frame(
-    Latitude = coop[, 1], Longitude = coop[, 2],
-    value = pred_ul, variable = "97.5th percentile"
+formula_nogp <- as.formula(
+  paste0(
+    "y ~ 0 + b0 + ",
+    paste(covariates, collapse = " + ")
   )
 )
-dpm$variable <- as.factor(dpm$variable)
 
-#write covatriates to a csv labelled with iteration
-write.csv(data.frame(covariates), paste0("Code/Prevalence/Bovine BCT and PCR/Covariates_NGA/Covariates_model_",iteration-7,".csv"), row.names = FALSE)
-#write dpm to a csv labelled with iteration
-write.csv(dpm, paste0("Code/Prevalence/Bovine BCT and PCR/Projections_NGA/Projections_model_",iteration-7,".csv"), row.names = FALSE)
+res_nogp <- inla(
+  formula_nogp,
 
-#write.csv(waic_refs, paste0("Code/Prevalence/Bovine BCT/Results/",countries_to_infer,"/",countries_to_infer,"WAICs.csv"), row.names = FALSE)
-#write.csv(covariates, paste0("Code/Prevalence/Bovine BCT/Results/",countries_to_infer,"/",countries_to_infer,"Covariates.csv"), row.names = FALSE)
+  data = inla.stack.data(stk.full),
+
+  family = "binomial",
+
+  Ntrials = numtrials,
+
+  control.predictor = list(
+    link = 1,
+    compute = TRUE,
+    A = inla.stack.A(stk.full)
+  ),
+
+  verbose = FALSE,
+
+  inla.mode = "compact"
+)
+
+pred_nogp <- res_nogp$summary.fitted.values[
+  index,
+  "mean"
+]
+
+sum_nogp <- sum_nogp + pred_nogp
+
+############################################################
+################ CLEAN MEMORY ##############################
+############################################################
+
+rm(
+  res_nogp,
+  pred_mean,
+  pred_sd,
+  eta_mean,
+  eta_sd,
+  spatial_mean,
+  spatial_sd,
+  pred_nogp
+)
+
+gc()
+
+}
+
+############################################################
+################ COMPUTE AVERAGES ##########################
+############################################################
+
+avg_prev_mean <- sum_prev_mean / n_iterations
+
+avg_prev_sd <- sqrt(
+  sum_prev_var / n_iterations
+)
+
+avg_eta_mean <- sum_eta_mean / n_iterations
+
+avg_eta_sd <- sqrt(
+  sum_eta_var / n_iterations
+)
+
+avg_spatial_mean <- sum_spatial_mean / n_iterations
+
+avg_spatial_sd <- sqrt(
+  sum_spatial_var / n_iterations
+)
+
+avg_nogp <- sum_nogp / n_iterations
+
+############################################################
+################ SAVE DIAGNOSTICS ##########################
+############################################################
+
+diagnostics <- data.frame(
+
+  lon = coop[,1],
+  lat = coop[,2],
+
+  ##########################################################
+  ################ PREVALENCE ##############################
+  ##########################################################
+
+  prevalence_mean = avg_prev_mean,
+  prevalence_sd   = avg_prev_sd,
+
+  ##########################################################
+  ################ LATENT SCALE ############################
+  ##########################################################
+
+  eta_mean = avg_eta_mean,
+  eta_sd   = avg_eta_sd,
+
+  ##########################################################
+  ################ SPATIAL FIELD ###########################
+  ##########################################################
+
+  spatial_mean = avg_spatial_mean,
+  spatial_sd   = avg_spatial_sd,
+
+  ##########################################################
+  ################ NO GP ###################################
+  ##########################################################
+
+  prevalence_no_gp = avg_nogp,
+
+  ##########################################################
+  ################ DATA COVERAGE ###########################
+  ##########################################################
+
+  dist_to_data = dist_to_data
+)
+
+write.csv(
+  diagnostics,
+  "Code/Prevalence/Bovine BCT and PCR/Diagnostics ETH/Diagnostics.csv",
+  row.names = FALSE
+)
+
 
 

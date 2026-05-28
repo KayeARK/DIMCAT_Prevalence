@@ -58,7 +58,7 @@ means_matrix <- matrix(NA, nrow=n_units, ncol=n_datasets)
 within_var_accum <- matrix(NA, nrow=n_units, ncol=n_datasets)
 
 for (i in 1:n_datasets){
-dpm <- read.csv(paste0("Code/Prevalence/Bovine BCT and PCR/Projections_NGA/Projections_model_",i,".csv"))
+dpm <- read.csv(paste0("Code/Prevalence/Bovine BCT and PCR/Projections_NGA_better_mesh/Projections_model_",i,".csv"))
 
 
 #extract all data where 4th column is "Mean"

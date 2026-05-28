@@ -20,8 +20,8 @@ library(ggspatial)
 
 
 # Determine number of units from Ethiopian projection files
-n_datasets <- 1000
-sample_file <- "Code/Prevalence/Bovine BCT and PCR/Projections_ETH/Projections_model_1.csv"
+n_datasets <- 469
+sample_file <- "Code/Prevalence/Bovine BCT and PCR/Projections_ETH_better_mesh/Projections_model_1.csv"
 if (file.exists(sample_file)) {
   sample_data <- read.csv(sample_file)
   n_units <- nrow(sample_data[sample_data$variable == "Mean", ])
@@ -64,7 +64,7 @@ means_matrix <- matrix(NA, nrow=n_units, ncol=n_datasets)
 within_var_accum <- matrix(NA, nrow=n_units, ncol=n_datasets)
 
 for (i in 1:n_datasets){
-dpm <- read.csv(paste0("Code/Prevalence/Bovine BCT and PCR/Projections_ETH/Projections_model_",i,".csv"))
+dpm <- read.csv(paste0("Code/Prevalence/Bovine BCT and PCR/Projections_ETH_better_mesh/Projections_model_",i,".csv"))
 
 
 #extract all data where 4th column is "Mean"
@@ -231,16 +231,11 @@ cat("Found", nrow(bovine_ethiopia_sf), "bovine data points within Ethiopia\n")
 cat("  - BCT tests:", sum(bovine_ethiopia_sf$Test_Type == "BCT/HCT"), "\n")
 cat("  - PCR tests:", sum(bovine_ethiopia_sf$Test_Type == "PCR"), "\n")
 
-# Function to process uncertainty data (swap coordinates and create spatial points)
+# Function to process uncertainty data (create spatial points without coordinate swap)
 process_uncertainty_data <- function(uncertainty_data, value_col) {
   # Create a copy and select relevant columns
   proj_data <- uncertainty_data[, c("Longitude", "Latitude", value_col)]
   names(proj_data)[3] <- "value"  # Rename the value column for consistency
-  
-  # Swap longitude and latitude (they are reversed in the data)
-  temp <- proj_data$Longitude
-  proj_data$Longitude <- proj_data$Latitude
-  proj_data$Latitude <- temp
   
   # Remove any rows with missing coordinates or values
   proj_data <- proj_data[!is.na(proj_data$Longitude) & !is.na(proj_data$Latitude) & !is.na(proj_data$value), ]
@@ -529,7 +524,7 @@ if(nrow(zone_between_var) > 0) {
 
 
 #plot rel_between
-ggplot(dpm_var) + geom_tile(aes(Latitude, Longitude, fill = rel_between)) +
+ggplot(dpm_var) + geom_tile(aes(Longitude, Latitude, fill = rel_between)) +
   coord_fixed(ratio = 1) +
   scale_fill_gradient(
     name = "Relative importance of\nbetween-dataset variability",
