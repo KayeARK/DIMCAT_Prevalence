@@ -24,6 +24,11 @@ adjusted_prev <- rowMeans(
   na.rm = TRUE
 )
 
+####### TEST TYPE
+
+test_type <- data_adjusted[,7]
+
+
 ############################################################
 ################ LOAD NIGERIA BORDER #######################
 ############################################################
@@ -73,6 +78,8 @@ raw_data <- data.frame(
 adjusted_data <- data.frame(
   prevalence = adjusted_prev[keep_rows]
 )
+
+test_type <- test_type[keep_rows]
 ############################################################
 ################ LOAD GEOSTATISTICAL DATA ##################
 ############################################################
@@ -221,7 +228,7 @@ plot_histogram <- function(
 p_raw <- plot_histogram(
   data = raw_data,
   fill_colour = "steelblue",
-  title = "Raw NGA Data"
+  title = "Raw Nigeria data"
 )
 
 print(p_raw)
@@ -233,7 +240,7 @@ print(p_raw)
 p_adjusted <- plot_histogram(
   data = adjusted_data,
   fill_colour = "darkorange",
-  title = "Adjusted NGA Data"
+  title = "Adjusted Nigeria data"
 )
 
 print(p_adjusted)
@@ -245,10 +252,71 @@ print(p_adjusted)
 p_geo <- plot_histogram(
   data = geo_data,
   fill_colour = "forestgreen",
-  title = "Geostatistical NGA Data"
+  title = "Geostatistical Nigeria data"
 )
 
 print(p_geo)
+
+############################################################
+################ RAW VS ADJUSTED SCATTER ###################
+############################################################
+
+scatter_data <- data.frame(
+  raw      = raw_data$prevalence,
+  adjusted = adjusted_data$prevalence,
+  test     = test_type
+)
+
+scatter_data$test <- factor(
+  scatter_data$test,
+  levels = c("HCT", "PCR"),
+  labels = c("HCT/BCT", "PCR")
+)
+
+p_scatter <- ggplot(
+  scatter_data,
+  aes(
+    x = raw,
+    y = adjusted,
+    colour = test
+  )
+) +
+
+  geom_point(
+    alpha = 0.6,
+    size = 2
+  ) +
+
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dashed",
+    colour = "black",
+    linewidth = 1
+  ) +
+
+  theme_bw() +
+
+  labs(
+    title = "Raw vs adjusted prevalence in Nigeria",
+    x = "Raw prevalence",
+    y = "Adjusted prevalence",
+    colour = "Diagnostic test"
+  ) +
+
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 16
+    )
+  ) +
+  scale_colour_manual(
+  values = c(
+    "HCT/BCT" = "#1b9e77",
+    "PCR" = "#d95f02"
+  )
+)
+print(p_scatter)
 
 ############################################################
 ################ SAVE FIGURES ##############################
@@ -277,3 +345,34 @@ ggsave(
   height = 5,
   dpi = 300
 )
+
+ggsave(
+  "Code/Prevalence/Bovine BCT and PCR/Diagnostics NGA/Figure_Raw_vs_Adjusted.png",
+  p_scatter,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
+
+fits <- scatter_data %>%
+
+  filter(raw <= 0.2 & raw>0) %>%
+
+  group_by(test) %>%
+
+  do({
+
+    model <- lm(
+      adjusted ~ raw,
+      data = .
+    )
+
+    data.frame(
+      intercept = coef(model)[1],
+      gradient  = coef(model)[2],
+      r2        = summary(model)$r.squared
+    )
+
+  })
+
+print(fits)

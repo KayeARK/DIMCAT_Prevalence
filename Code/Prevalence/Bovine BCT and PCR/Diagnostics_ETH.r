@@ -11,7 +11,7 @@ library(geodata)
 library(raster)
 library(FNN)
 
-n_iterations <- 5
+n_iterations <- 1000
 
 diagnostics_initialised <- FALSE
 
