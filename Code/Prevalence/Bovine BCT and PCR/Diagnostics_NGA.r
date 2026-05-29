@@ -11,7 +11,7 @@ library(geodata)
 library(raster)
 library(FNN)
 
-n_iterations <- 1000
+n_iterations <- 20
 
 diagnostics_initialised <- FALSE
 
@@ -659,6 +659,12 @@ avg_spatial_sd <- sqrt(
   sum_spatial_var / n_iterations
 )
 
+############################################################
+################ FIXED EFFECT COMPONENT ####################
+############################################################
+
+fixed_effect_mean <- avg_eta_mean - avg_spatial_mean
+
 avg_nogp <- sum_nogp / n_iterations
 
 ############################################################
@@ -703,6 +709,61 @@ diagnostics <- data.frame(
 
   dist_to_data = dist_to_data
 )
+
+# ############################################################
+# ################ SANITY CHECK ##############################
+# ############################################################
+
+# cat("\n")
+# cat("=====================================\n")
+# cat("FIXED EFFECTS VS SPATIAL FIELD\n")
+# cat("=====================================\n")
+
+# cat("\nSDs:\n")
+
+# cat(
+#   "SD(Xbeta) =",
+#   round(sd(fixed_effect_mean, na.rm = TRUE), 3),
+#   "\n"
+# )
+
+# cat(
+#   "SD(spatial field) =",
+#   round(sd(avg_spatial_mean, na.rm = TRUE), 3),
+#   "\n"
+# )
+
+# cat("\nRanges:\n")
+
+# cat(
+#   "Range(Xbeta) = [",
+#   round(min(fixed_effect_mean, na.rm = TRUE), 3),
+#   ", ",
+#   round(max(fixed_effect_mean, na.rm = TRUE), 3),
+#   "]\n",
+#   sep = ""
+# )
+
+# cat(
+#   "Range(spatial field) = [",
+#   round(min(avg_spatial_mean, na.rm = TRUE), 3),
+#   ", ",
+#   round(max(avg_spatial_mean, na.rm = TRUE), 3),
+#   "]\n",
+#   sep = ""
+# )
+
+# cat("=====================================\n")
+
+# cat(
+#   "SD(spatial field) / SD(Xbeta) = ",
+#   round(
+#     sd(avg_spatial_mean, na.rm = TRUE) /
+#     sd(fixed_effect_mean, na.rm = TRUE),
+#     2
+#   ),
+#   "\n"
+# )
 
 write.csv(
   diagnostics,

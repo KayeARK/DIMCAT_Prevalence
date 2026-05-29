@@ -287,7 +287,8 @@ plot_map <- function(
   title,
   filename,
   limits = NULL,
-  viridis_option = "viridis"
+  viridis_option = "viridis",
+  transform = "identity"
 ){
 
   ##########################################################
@@ -334,29 +335,31 @@ plot_map <- function(
 
  
 
-  ##########################################################
-  ################ COLOUR SCALE ############################
-  ##########################################################
+##########################################################
+################ COLOUR SCALE ############################
+##########################################################
 
-  if(is.null(limits)){
+if(is.null(limits)){
 
-    p <- p +
+  p <- p +
 
-      scale_fill_viridis_c(
-        option = viridis_option,
-        na.value = "grey90"
-      )
+    scale_fill_viridis_c(
+      option = viridis_option,
+      trans = transform,
+      na.value = "grey90"
+    )
 
-  } else {
+} else {
 
-    p <- p +
+  p <- p +
 
-      scale_fill_viridis_c(
-        option = viridis_option,
-        limits = limits,
-        na.value = "grey90"
-      )
-  }
+    scale_fill_viridis_c(
+      option = viridis_option,
+      limits = limits,
+      trans = transform,
+      na.value = "grey90"
+    )
+}
 
   ##########################################################
   ################ FORMATTING ##############################
@@ -439,7 +442,7 @@ plot_map(
   variable = "prevalence_no_gp",
   title = "Average predicted prevalence without spatial field",
   filename = "Code/Prevalence/Bovine BCT and PCR/Diagnostics NGA/Figure_NoGP.png",
-  limits = c(0,1)
+  limits = c(0,1),
 )
 
 ############################################################
