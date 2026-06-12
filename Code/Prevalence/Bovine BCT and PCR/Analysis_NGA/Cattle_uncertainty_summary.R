@@ -2,6 +2,17 @@ rm(list=ls())
 
 library(dplyr)
 
+# Load state-level correction factors
+correction_factors <- read.csv(
+  "Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Cattle_at_risk_correction_factors.csv",
+  stringsAsFactors = FALSE
+) %>%
+  dplyr::select(state, correction_factor)
+
+# Remove national total row if present
+correction_factors <- correction_factors %>%
+  filter(state != "Total")
+
 # Set the directory containing the Cattle_at_risk files
 data_dir <- "Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Cattle_at_risk/"
 
@@ -15,10 +26,55 @@ all_data <- list()
 # Read all files
 for (i in seq_along(projection_files)) {
   file_path <- projection_files[i]
+
   data <- read.csv(file_path, stringsAsFactors = FALSE)
-  
-  # Add model identifier
-  data$model_id <- i
+
+# Remove existing Total row
+data <- data[data$state != "Total", ]
+
+# Join correction factors
+data <- data %>%
+  left_join(correction_factors, by = "state")
+
+# Check for unmatched states
+if(any(is.na(data$correction_factor))){
+  stop(
+    "Missing correction factors for: ",
+    paste(unique(data$state[is.na(data$correction_factor)]),
+          collapse = ", ")
+  )
+}
+
+# Apply correction
+data <- data %>%
+  mutate(
+    cattle_mean  = cattle_mean  * correction_factor,
+    cattle_lower = cattle_lower * correction_factor,
+    cattle_upper = cattle_upper * correction_factor
+  )
+
+if(any(is.na(data$cattle_mean))){
+  stop("NA values introduced after correction")
+}
+
+# Recompute national total from corrected states
+total_row <- data.frame(
+  state = "Total",
+  mean_value = mean(data$mean_value, na.rm = TRUE),
+  cattle_mean = sum(data$cattle_mean, na.rm = TRUE),
+  lower_value = mean(data$lower_value, na.rm = TRUE),
+  cattle_lower = sum(data$cattle_lower, na.rm = TRUE),
+  upper_value = mean(data$upper_value, na.rm = TRUE),
+  cattle_upper = sum(data$cattle_upper, na.rm = TRUE),
+  correction_factor = NA
+)
+
+data <- rbind(data, total_row)
+
+data$correction_factor <- NULL
+
+# Add model identifier
+data$model_id <- i
   
   # Store in list
   all_data[[i]] <- data

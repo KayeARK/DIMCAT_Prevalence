@@ -1,6 +1,38 @@
 rm(list=ls())
 
 library(dplyr)
+library(sf)
+library(geodata)
+
+# Load state-level correction factors
+correction_factors <- read.csv(
+  "Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Cattle_at_risk_correction_factors.csv",
+  stringsAsFactors = FALSE
+) %>%
+  dplyr::select(state, correction_factor)
+
+# Remove national total row if present
+correction_factors <- correction_factors %>%
+  filter(state != "Total")
+
+
+#### LOOK UP TABLE FOR LGA TO STATE MAPPING ####
+# Nigeria admin level 2 (LGAs)
+nga_lga <- gadm(
+  country = "NGA",
+  level = 2,
+  path = tempdir()
+)
+
+nga_lga <- st_as_sf(nga_lga)
+
+lga_lookup <- nga_lga %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    lga = NAME_2,
+    state = NAME_1
+  ) %>%
+  distinct()
 
 # Set the directory containing the Cattle_at_risk files
 data_dir <- "Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Cattle_at_risk_fine/"
@@ -16,6 +48,51 @@ all_data <- list()
 for (i in seq_along(projection_files)) {
   file_path <- projection_files[i]
   data <- read.csv(file_path, stringsAsFactors = FALSE)
+
+# Separate Total row
+total_row_original <- data[data$state == "Total", ]
+data <- data[data$state != "Total", ]
+
+# Rename LGA column
+data <- data %>%
+  rename(lga = state)
+
+# Attach parent state
+data <- data %>%
+  left_join(lga_lookup, by = "lga")
+
+if(any(is.na(data$state))){
+  stop(
+    "Missing state assignment for: ",
+    paste(unique(data$lga[is.na(data$state)]),
+          collapse = ", ")
+  )
+}
+
+# Attach correction factor
+data <- data %>%
+  left_join(correction_factors, by = "state")
+
+if(any(is.na(data$correction_factor))){
+  stop(
+    "Missing correction factor for: ",
+    paste(unique(data$state[is.na(data$correction_factor)]),
+          collapse = ", ")
+  )
+}
+
+# Apply correction
+data <- data %>%
+  mutate(
+    cattle_mean  = cattle_mean  * correction_factor,
+    cattle_lower = cattle_lower * correction_factor,
+    cattle_upper = cattle_upper * correction_factor
+  )
+
+# Remove temporary columns
+data <- data %>%
+  dplyr::select(-state, -correction_factor) %>%
+  rename(state = lga)
   
   # Add model identifier
   data$model_id <- i
@@ -58,31 +135,32 @@ uncertainty_summary <- state_data %>%
     .groups = 'drop'
   )
 
-# Compute totals across all states
-total_data <- combined_data[combined_data$state == "Total", ]
+# Compute corrected national totals from LGA estimates
 
-total_summary <- total_data %>%
+total_summary <- combined_data %>%
+  group_by(model_id) %>%
+  summarise(
+    mean_value = mean(mean_value, na.rm = TRUE),
+    cattle_mean = sum(cattle_mean, na.rm = TRUE),
+    cattle_lower = sum(cattle_lower, na.rm = TRUE),
+    cattle_upper = sum(cattle_upper, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
   summarise(
     state = "Total",
-    
-    # Basic statistics for mean cattle at risk
+
     mean_value_mean = mean(mean_value, na.rm = TRUE),
     mean_cattle_mean = mean(cattle_mean, na.rm = TRUE),
-    
-    # Data uncertainty: 95% CI for the mean cattle at risk across all models
+
     data_uncertainty_lower = quantile(cattle_mean, 0.025, na.rm = TRUE),
     data_uncertainty_upper = quantile(cattle_mean, 0.975, na.rm = TRUE),
     data_uncertainty_width = data_uncertainty_upper - data_uncertainty_lower,
-    
-    # Model uncertainty: Mean of the 95% CIs from each model
+
     model_uncertainty_lower = mean(cattle_lower, na.rm = TRUE),
     model_uncertainty_upper = mean(cattle_upper, na.rm = TRUE),
     model_uncertainty_width = model_uncertainty_upper - model_uncertainty_lower,
-    
-    
-    # Sample size
-    n_models = n(),
-    .groups = 'drop'
+
+    n_models = n()
   )
 
 # Combine state and total summaries
