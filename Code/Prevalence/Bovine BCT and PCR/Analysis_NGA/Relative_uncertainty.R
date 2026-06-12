@@ -58,7 +58,7 @@ means_matrix <- matrix(NA, nrow=n_units, ncol=n_datasets)
 within_var_accum <- matrix(NA, nrow=n_units, ncol=n_datasets)
 
 for (i in 1:n_datasets){
-dpm <- read.csv(paste0("Code/Prevalence/Bovine BCT and PCR/Projections_NGA_better_mesh/Projections_model_",i,".csv"))
+dpm <- read.csv(paste0("Code/Prevalence/Bovine BCT and PCR/Projections_NGA/Projections_model_",i,".csv"))
 
 
 #extract all data where 4th column is "Mean"
@@ -336,11 +336,11 @@ create_uncertainty_choropleth <- function(lga_data, title_suffix, legend_title, 
   
   # Add Nigeria LGAs with uncertainty data
   p <- p + 
-    geom_sf(aes(fill = lga_value), lwd = 0.1, color = "white") +
+    geom_sf(aes(fill = lga_value), lwd = 0.05, color = "black") +
     geom_sf(data = nigeria_states_sf, fill = NA, color = "black", lwd = 0.5) +
     # Add bovine data points (different colors for BCT and PCR)
     geom_point(data = st_drop_geometry(bovine_nigeria_sf), 
-               aes(x = lon, y = lat, size = Number_of_animal_tested, color = Test_Type),
+               aes(x = lon, y = lat, size = Number_of_animal_tested, shape = Test_Type), colour="black", fill="white", stroke=0.8,
                alpha = 0.8) +  # Increased from 0.7 to 0.8 for better visibility
     scale_fill_viridis_c(
       name = legend_title,
@@ -352,13 +352,18 @@ create_uncertainty_choropleth <- function(lga_data, title_suffix, legend_title, 
     ) +
     # Add size legend for sample size
     scale_size_continuous(name = "Sample size", 
-                         range = c(1, 6),  # Increased from c(1, 4) to make sizes more distinguishable
+                         range = c(1, 10),  # Increased from c(1, 4) to make sizes more distinguishable
                          breaks = c(10, 50, 100, 200),
                          labels = c("10", "50", "100", "200+")) +
     # Add color scale for test types
     scale_color_manual(name = "Test type",
                       values = c("HCT/BCT" = "red", "PCR" = "blue"),
                       guide = guide_legend(override.aes = list(size = 3, alpha = 0.8))) +
+                      scale_shape_manual(name = "Test type",labels = c(
+    "HCT/BCT" = "BCT",
+    "PCR" = "PCR"
+  ),values = c("HCT/BCT" = 21,"PCR" = 22)
+)+
     # Add scale bar and north arrow
     annotation_scale(location = "bl", width_hint = 0.3, text_cex = 0.8, 
                     bar_cols = c("black", "white"), line_width = 1) +

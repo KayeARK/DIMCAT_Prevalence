@@ -10,6 +10,7 @@ library(gtable)
 library(readxl)
 library(ggspatial)
 library(cowplot)
+library(ggpattern)
 
 # Get Nigerian administrative boundaries at LGA level (level 2)
 # Nigeria GADM data only goes to level 2 (Local Government Areas), not level 3 (wards)
@@ -99,7 +100,7 @@ tryCatch({
 })
 
 # Load and average all projection files in Projections_NGA directory
-projections_dir <- "Code/Prevalence/Bovine BCT and PCR/Projections_NGA_better_mesh/"
+projections_dir <- "Code/Prevalence/Bovine BCT and PCR/Projections_NGA/"
 projection_files <- list.files(projections_dir, pattern = "Projections_model_.*\\.csv", full.names = TRUE)
 
 cat("Found", length(projection_files), "projection files to average\n")
@@ -362,7 +363,7 @@ create_choropleth <- function(lga_data, title_suffix, add_bovine_data = FALSE, s
   
   # Add Nigeria LGAs with prevalence data
   p <- p + 
-    geom_sf(aes(fill = lga_prevalence), lwd = 0.1, color = "white") +
+    geom_sf(aes(fill = lga_prevalence), lwd = 0.05, color = "black") +
     geom_sf(data = nigeria_states_sf, fill = NA, color = "black", lwd = 0.5)
   
   # Add high uncertainty overlay if requested
@@ -380,7 +381,7 @@ create_choropleth <- function(lga_data, title_suffix, add_bovine_data = FALSE, s
   # Add bovine data points if requested (only for percentile plots)
   if(add_bovine_data) {
     p <- p + geom_point(data = st_drop_geometry(bovine_nigeria_sf), 
-                       aes(x = lon, y = lat, size = Number_of_animal_tested, color = Test_Type),
+                       aes(x = lon, y = lat, size = Number_of_animal_tested, shape = Test_Type), colour="black", fill="white", stroke=0.8,
                        alpha = 0.8)  # Increased alpha for better visibility
   }
   
@@ -407,13 +408,18 @@ create_choropleth <- function(lga_data, title_suffix, add_bovine_data = FALSE, s
     p <- p +
       # Add size legend for sample size
       scale_size_continuous(name = "Sample size", 
-                           range = c(1, 6),  # Increased from c(1, 4) to make sizes more distinguishable
+                           range = c(1, 10),  # Increased from c(1, 4) to make sizes more distinguishable
                            breaks = c(10, 50, 100, 200),
                            labels = c("10", "50", "100", "200+")) +
       # Add color scale for test types
       scale_color_manual(name = "Test type",
                         values = c("BCT" = "#00FFFF", "PCR" = "#FF6347"),  # Bright cyan and tomato - distinct colors with high contrast
-                        guide = guide_legend(override.aes = list(size = 3, alpha = 0.8)))
+                        guide = guide_legend(override.aes = list(size = 3, alpha = 0.8)))+
+      scale_shape_manual(name = "Test type",labels = c(
+    BCT = "HCT/BCT",
+    PCR = "PCR"
+  ),values = c(BCT = 21,PCR = 22)
+)
   }
   
   p <- p +
@@ -503,11 +509,8 @@ create_transparent_choropleth <- function(lga_data, title_suffix, add_bovine_dat
     high_uncertainty_lgas <- nigeria_lgas_final %>% 
       dplyr::filter(high_uncertainty == TRUE)
     
-    if(nrow(high_uncertainty_lgas) > 0) {
-      p <- p + 
-        geom_sf(data = high_uncertainty_lgas, fill = "white", alpha = 0.4, 
-                color = "red", lwd = 0.3)
-    }
+
+    
   }
   
   # Add bovine data points if requested (only for percentile plots)

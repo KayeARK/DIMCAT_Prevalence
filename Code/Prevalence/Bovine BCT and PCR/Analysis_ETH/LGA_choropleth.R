@@ -10,6 +10,7 @@ library(gtable)
 library(readxl)
 library(ggspatial)
 library(cowplot)
+library(ggpattern)
 
 # Get Ethiopian administrative boundaries at zone level (level 2)
 # Ethiopia GADM data goes to level 2 (Zones), similar to Nigeria's LGAs
@@ -105,7 +106,7 @@ tryCatch({
 })
 
 # Load and average all projection files in Projections_ETH directory
-projections_dir <- "Code/Prevalence/Bovine BCT and PCR/Projections_ETH_better_mesh/"
+projections_dir <- "Code/Prevalence/Bovine BCT and PCR/Projections_ETH/"
 projection_files <- list.files(projections_dir, pattern = "Projections_model_.*\\.csv", full.names = TRUE)
 
 cat("Found", length(projection_files), "projection files to average\n")
@@ -379,14 +380,14 @@ process_bovine_data <- function(data) {
 bovine_ethiopia_sf <- process_bovine_data(bovine_data_raw)
 if(!is.null(bovine_ethiopia_sf)) {
   cat("Found", nrow(bovine_ethiopia_sf), "bovine data points within Ethiopia\n")
-  cat("  - HCT/BCT tests:", sum(bovine_ethiopia_sf$Test_Type == "HCT/BCT"), "\n")
+  cat("  - BCT tests:", sum(bovine_ethiopia_sf$Test_Type == "HCT/BCT"), "\n")
   cat("  - PCR tests:", sum(bovine_ethiopia_sf$Test_Type == "PCR"), "\n")
 } else {
   cat("No bovine data available for Ethiopia - maps will show choropleth only\n")
 }
 
 # Function to create choropleth map (matching Nigerian version exactly)
-create_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bovine = FALSE, show_uncertainty = FALSE, add_inset = FALSE) {
+create_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bovine = FALSE, show_uncertainty = TRUE, add_inset = FALSE) {
   
   # Handle the different data types
   if(data_type == "mean") {
@@ -420,7 +421,7 @@ create_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bo
   
   # Add Ethiopia zones with prevalence data
   p <- p + 
-    geom_sf(aes(fill = !!sym(fill_column)), lwd = 0.1, color = "white") +
+    geom_sf(aes(fill = !!sym(fill_column)), lwd = 0.05, color = "black") +
     geom_sf(data = ethiopia_regions_sf, fill = NA, color = "black", lwd = 0.5)
   
   # Add high uncertainty overlay if requested
@@ -430,8 +431,23 @@ create_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bo
     
     if(nrow(high_uncertainty_zones) > 0) {
       p <- p + 
-        geom_sf(data = high_uncertainty_zones, fill = "white", alpha = 0.4, 
-                color = "red", lwd = 0.3)
+        geom_sf_pattern(
+  data = high_uncertainty_zones,
+  aes(pattern = "High uncertainty"),
+  pattern = "crosshatch",
+
+  fill = NA,
+  colour = NA,
+
+  pattern_colour = "grey40",
+  pattern_fill = "grey40",
+
+  pattern_density = 0.01,
+  pattern_spacing = 0.05,
+  pattern_size = 0.15,
+
+  show.legend = FALSE
+)
     }
   }
   
@@ -468,26 +484,27 @@ create_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bo
   # Add uncertainty caption if high uncertainty areas exist (like Nigerian version)
   if(show_uncertainty && "high_uncertainty" %in% names(ethiopia_zones_final) && 
      any(ethiopia_zones_final$high_uncertainty, na.rm = TRUE)) {
-    p <- p + labs(caption = "Areas with white overlay and red border indicate high uncertainty (CI width > 0.80)")
+    p <- p + labs(caption = "Cross-hatched areas indicate high uncertainty (95% CI width > 0.80)")
   }
   
   # Add bovine data points if requested and available (for percentile maps)
   if(add_bovine && !is.null(bovine_ethiopia_sf) && nrow(bovine_ethiopia_sf) > 0) {
     p <- p + geom_point(data = st_drop_geometry(bovine_ethiopia_sf), 
-                       aes(x = lon, y = lat, size = Number_of_animal_tested, color = Test_Type),
+                       aes(x = lon, y = lat, size = Number_of_animal_tested, shape = Test_Type), colour="black", fill="white", stroke=0.8,
                        alpha = 0.8)  # Increased alpha for better visibility
     
     # Add additional scales for bovine data
     p <- p +
       # Add size legend for sample size
       scale_size_continuous(name = "Sample size", 
-                           range = c(1, 6),  # Increased from c(1, 4) to make sizes more distinguishable
+                           range = c(1, 10),  # Increased from c(1, 4) to make sizes more distinguishable
                            breaks = c(10, 50, 100, 200),
                            labels = c("10", "50", "100", "200+")) +
       # Add color scale for test types
       scale_color_manual(name = "Test type",
                         values = c("HCT/BCT" = "#00FFFF", "PCR" = "#FF6347"),
-                        guide = guide_legend(override.aes = list(size = 3, alpha = 0.8)))
+                        guide = guide_legend(override.aes = list(size = 3, alpha = 0.8))) +
+                        scale_shape_manual(values = c("HCT/BCT" = 21, "PCR" = 22))
   }
   
   # Add inset map if requested and data is available
@@ -517,9 +534,9 @@ lga_prevalence_lower <- zone_prevalence_lower
 lga_prevalence_upper <- zone_prevalence_upper
 
 # Create choropleth maps - mean map first, then percentile maps with bovine data overlay
-p_mean <- create_choropleth(zone_prevalence_mean, "(mean)", data_type = "mean", add_bovine = TRUE, show_uncertainty = FALSE, add_inset = TRUE)
-p_lower <- create_choropleth(zone_prevalence_lower, "(2.5th percentile)", data_type = "lower", add_bovine = TRUE, show_uncertainty = FALSE)
-p_upper <- create_choropleth(zone_prevalence_upper, "(97.5th percentile)", data_type = "upper", add_bovine = TRUE, show_uncertainty = FALSE)
+p_mean <- create_choropleth(zone_prevalence_mean, "(mean)", data_type = "mean", add_bovine = TRUE, show_uncertainty = TRUE, add_inset = TRUE)
+p_lower <- create_choropleth(zone_prevalence_lower, "(2.5th percentile)", data_type = "lower", add_bovine = TRUE, show_uncertainty = TRUE, add_inset = FALSE)
+p_upper <- create_choropleth(zone_prevalence_upper, "(97.5th percentile)", data_type = "upper", add_bovine = TRUE, show_uncertainty = TRUE, add_inset = FALSE)
 
 # Create transparent background versions with custom font color
 font_color <- "#EEE5D4"
@@ -566,8 +583,14 @@ create_transparent_choropleth <- function(lga_data, title_suffix, data_type = "m
     
     if(nrow(high_uncertainty_zones) > 0) {
       p <- p + 
-        geom_sf(data = high_uncertainty_zones, fill = "white", alpha = 0.4, 
-                color = "red", lwd = 0.3)
+                geom_sf_pattern(
+ data = high_uncertainty_zones,
+ pattern = "crosshatch",
+ pattern_density = 0.01,
+ pattern_spacing = 0.1,
+ fill = NA,
+ colour = NA
+)
     }
   }
   

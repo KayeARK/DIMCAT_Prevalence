@@ -337,17 +337,17 @@ create_choropleth <- function(lga_data, title_suffix, data_type = "mean", add_bo
   
   # Add areas with no cattle but risk (tsetse zones without cattle) in light blue
   if(nrow(lgas_no_cattle_but_risk) > 0) {
-    p <- p + geom_sf(data = lgas_no_cattle_but_risk, fill = "lightblue", color = "white", lwd = 0.1)
+    p <- p + geom_sf(data = lgas_no_cattle_but_risk, fill = "lightblue", color = "black", lwd = 0.05)
   }
   
   # Add areas with no risk/cattle in light grey  
   if(nrow(lgas_no_risk) > 0) {
-    p <- p + geom_sf(data = lgas_no_risk, fill = "lightgrey", color = "white", lwd = 0.1)
+    p <- p + geom_sf(data = lgas_no_risk, fill = "lightgrey", color = "black", lwd = 0.05)
   }
   
   # Add Nigeria LGAs with cattle at risk data (main choropleth)
   if(nrow(lgas_with_cattle) > 0) {
-    p <- p + geom_sf(data = lgas_with_cattle, aes(fill = !!sym(fill_column)), lwd = 0.1, color = "white")
+    p <- p + geom_sf(data = lgas_with_cattle, aes(fill = !!sym(fill_column)), lwd = 0.05, color = "black")
   }
   
   # Add state boundaries for reference

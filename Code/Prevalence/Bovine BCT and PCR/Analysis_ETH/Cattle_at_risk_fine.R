@@ -328,17 +328,17 @@ create_choropleth <- function(zone_data, title_suffix, data_type = "mean", add_b
   
   # Add areas with no cattle but risk (tsetse zones without cattle) in light blue
   if(nrow(zones_no_cattle_but_risk) > 0) {
-    p <- p + geom_sf(data = zones_no_cattle_but_risk, fill = "lightblue", color = "white", lwd = 0.1)
+    p <- p + geom_sf(data = zones_no_cattle_but_risk, fill = "lightblue", color = "black", lwd = 0.05)
   }
   
   # Add areas with no risk/cattle in light grey  
   if(nrow(zones_no_risk) > 0) {
-    p <- p + geom_sf(data = zones_no_risk, fill = "lightgrey", color = "white", lwd = 0.1)
+    p <- p + geom_sf(data = zones_no_risk, fill = "lightgrey", color = "black", lwd = 0.05)
   }
   
   # Add Ethiopia zones with cattle at risk data (main choropleth)
   if(nrow(zones_with_cattle) > 0) {
-    p <- p + geom_sf(data = zones_with_cattle, aes(fill = !!sym(fill_column)), lwd = 0.1, color = "white")
+    p <- p + geom_sf(data = zones_with_cattle, aes(fill = !!sym(fill_column)), lwd = 0.05, color = "black")
   }
   
   # Add region boundaries
