@@ -741,3 +741,388 @@ cat("Total LGAs with data:", nrow(lga_prevalence_upper), "\n")
 if(nrow(lga_prevalence_upper) > 0) {
   print(summary(lga_prevalence_upper$lga_prevalence))
 }
+
+
+
+
+
+
+
+
+
+# ============================================================
+# FIGURE 2 SOURCE DATA
+# Export LGA prevalence estimates and plotted survey points
+# to one Excel workbook
+# ============================================================
+
+library(openxlsx)
+library(dplyr)
+library(sf)
+
+# Create output directory if necessary
+output_dir <- "Code/Prevalence/Bovine BCT and PCR/Analysis_NGA"
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# ------------------------------------------------------------
+# 1. LGA prevalence values plotted in Figure 2
+# ------------------------------------------------------------
+
+# Mean prevalence
+figure2_mean <- lga_prevalence_mean %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    State = NAME_1,
+    LGA = NAME_2,
+    Mean_prevalence = lga_prevalence
+  )
+
+# 2.5th percentile
+figure2_lower <- lga_prevalence_lower %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    State = NAME_1,
+    LGA = NAME_2,
+    Lower_2.5_percentile = lga_prevalence
+  )
+
+# 97.5th percentile
+figure2_upper <- lga_prevalence_upper %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    State = NAME_1,
+    LGA = NAME_2,
+    Upper_97.5_percentile = lga_prevalence
+  )
+
+# Join all three plotted prevalence estimates into one table
+figure2_lga_prevalence <- figure2_mean %>%
+  full_join(
+    figure2_lower,
+    by = c("State", "LGA")
+  ) %>%
+  full_join(
+    figure2_upper,
+    by = c("State", "LGA")
+  ) %>%
+  arrange(State, LGA)
+
+# ------------------------------------------------------------
+# 2. Survey-point data plotted over the maps
+# ------------------------------------------------------------
+
+# These are the variables actually represented in the point layer:
+# longitude and latitude determine location
+# sample size determines point size
+# test type determines point shape
+
+figure2_survey_points <- bovine_nigeria_sf %>%
+  st_drop_geometry() %>%
+  transmute(
+    Longitude = lon,
+    Latitude = lat,
+    Sample_size = Number_of_animal_tested,
+    Test_type = case_when(
+      Test_Type == "BCT" ~ "HCT/BCT",
+      Test_Type == "PCR" ~ "PCR",
+      TRUE ~ as.character(Test_Type)
+    )
+  ) %>%
+  arrange(Test_type, Longitude, Latitude)
+
+# ------------------------------------------------------------
+# 3. README information
+# ------------------------------------------------------------
+
+figure2_readme <- data.frame(
+  Item = c(
+    "Workbook description",
+    "Associated figure",
+    "LGA_prevalence sheet",
+    "Mean_prevalence",
+    "Lower_2.5_percentile",
+    "Upper_97.5_percentile",
+    "Survey_points sheet",
+    "Longitude and Latitude",
+    "Sample_size",
+    "Test_type",
+    "Units",
+    "Missing values"
+  ),
+  Description = c(
+    paste(
+      "Source data underlying Figure 2, including LGA-level",
+      "AAT prevalence estimates and the survey points plotted",
+      "over the prevalence maps."
+    ),
+    "Figure 2.",
+    paste(
+      "One row per Nigerian Local Government Area. Contains",
+      "the mean, 2.5th-percentile and 97.5th-percentile",
+      "prevalence values used to colour the maps."
+    ),
+    "Mean modelled AAT prevalence for the LGA.",
+    "Lower 2.5th percentile of modelled AAT prevalence for the LGA.",
+    "Upper 97.5th percentile of modelled AAT prevalence for the LGA.",
+    paste(
+      "Survey observations plotted over the prevalence maps.",
+      "One row represents one plotted survey location."
+    ),
+    "Geographic coordinates in decimal degrees, WGS84.",
+    "Number of cattle tested; used to determine plotted point size.",
+    "Diagnostic-test category; used to determine plotted point shape.",
+    "Prevalence values are proportions ranging from 0 to 1.",
+    "Blank cells represent unavailable values."
+  ),
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 4. Create one Excel workbook
+# ------------------------------------------------------------
+
+wb <- createWorkbook(
+  creator = "AR Kaye",
+  title = "Figure 2 source data",
+  subject = paste(
+    "LGA-level bovine trypanosomosis prevalence",
+    "and survey-point source data"
+  ),
+  category = "Research data"
+)
+
+addWorksheet(wb, "README")
+addWorksheet(wb, "LGA_prevalence")
+addWorksheet(wb, "Survey_points")
+
+writeData(
+  wb,
+  sheet = "README",
+  x = figure2_readme
+)
+
+writeData(
+  wb,
+  sheet = "LGA_prevalence",
+  x = figure2_lga_prevalence
+)
+
+writeData(
+  wb,
+  sheet = "Survey_points",
+  x = figure2_survey_points
+)
+
+# ------------------------------------------------------------
+# 5. Workbook formatting
+# ------------------------------------------------------------
+
+header_style <- createStyle(
+  fontColour = "#FFFFFF",
+  fgFill = "#1F4E78",
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  border = "bottom",
+  borderColour = "#FFFFFF"
+)
+
+prevalence_style <- createStyle(
+  numFmt = "0.000000"
+)
+
+coordinate_style <- createStyle(
+  numFmt = "0.000000"
+)
+
+integer_style <- createStyle(
+  numFmt = "0"
+)
+
+wrap_style <- createStyle(
+  wrapText = TRUE,
+  valign = "top"
+)
+
+# ------------------------------------------------------------
+# Format README
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  sheet = "README",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(figure2_readme),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "README",
+  style = wrap_style,
+  rows = 2:(nrow(figure2_readme) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  sheet = "README",
+  cols = 1,
+  widths = 26
+)
+
+setColWidths(
+  wb,
+  sheet = "README",
+  cols = 2,
+  widths = 80
+)
+
+setRowHeights(
+  wb,
+  sheet = "README",
+  rows = 2:(nrow(figure2_readme) + 1),
+  heights = 30
+)
+
+freezePane(
+  wb,
+  sheet = "README",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# Format LGA prevalence sheet
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  sheet = "LGA_prevalence",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(figure2_lga_prevalence),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "LGA_prevalence",
+  style = prevalence_style,
+  rows = 2:(nrow(figure2_lga_prevalence) + 1),
+  cols = 3:5,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  sheet = "LGA_prevalence",
+  cols = 1,
+  widths = 22
+)
+
+setColWidths(
+  wb,
+  sheet = "LGA_prevalence",
+  cols = 2,
+  widths = 28
+)
+
+setColWidths(
+  wb,
+  sheet = "LGA_prevalence",
+  cols = 3:5,
+  widths = 24
+)
+
+freezePane(
+  wb,
+  sheet = "LGA_prevalence",
+  firstRow = TRUE
+)
+
+addFilter(
+  wb,
+  sheet = "LGA_prevalence",
+  row = 1,
+  cols = 1:ncol(figure2_lga_prevalence)
+)
+
+# ------------------------------------------------------------
+# Format survey-point sheet
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  sheet = "Survey_points",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(figure2_survey_points),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Survey_points",
+  style = coordinate_style,
+  rows = 2:(nrow(figure2_survey_points) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Survey_points",
+  style = integer_style,
+  rows = 2:(nrow(figure2_survey_points) + 1),
+  cols = 3,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  sheet = "Survey_points",
+  cols = 1:2,
+  widths = 16
+)
+
+setColWidths(
+  wb,
+  sheet = "Survey_points",
+  cols = 3:4,
+  widths = 18
+)
+
+freezePane(
+  wb,
+  sheet = "Survey_points",
+  firstRow = TRUE
+)
+
+addFilter(
+  wb,
+  sheet = "Survey_points",
+  row = 1,
+  cols = 1:ncol(figure2_survey_points)
+)
+
+# ------------------------------------------------------------
+# 6. Save the single workbook
+# ------------------------------------------------------------
+
+figure2_output_file <- file.path(
+  output_dir,
+  "Figure_2_source_data.xlsx"
+)
+
+saveWorkbook(
+  wb,
+  file = figure2_output_file,
+  overwrite = TRUE
+)
+
+message(
+  "Figure 2 source-data workbook saved to: ",
+  figure2_output_file
+)

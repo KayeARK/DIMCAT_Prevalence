@@ -5,6 +5,7 @@ library(rstan)
 library(reshape2)
 library(posterior)
 library(bayesplot)
+library(openxlsx)
 
 fit<-readRDS("Code/TestSensSpec/latent_class_fit.rds")
 
@@ -208,3 +209,276 @@ ggsave("Code/TestSensSpec/specificity_density_transparent.pdf", plot = p2_transp
 
 
 
+library(openxlsx)
+library(dplyr)
+
+# ------------------------------------------------------------
+# Create source-data tables
+# ------------------------------------------------------------
+
+posterior_draws <- data.frame(
+  posterior_draw = seq_along(post$Se_pcr),
+  PCR_sensitivity = post$Se_pcr,
+  HCT_BCT_sensitivity = post$Se_hct,
+  PCR_specificity = post$Sp_pcr,
+  HCT_BCT_specificity = post$Sp_hct
+)
+
+# Analytical LogitNormal(0,1) prior curve
+eps <- 1e-6
+
+prior_curve <- data.frame(
+  parameter_value = seq(eps, 1 - eps, length.out = 10000)
+) |>
+  mutate(
+    prior_density =
+      dnorm(qlogis(parameter_value), mean = 0, sd = 1) /
+      (parameter_value * (1 - parameter_value)),
+    prior_distribution = "LogitNormal(0,1)"
+  )
+
+# Posterior summary function
+summarise_parameter <- function(x, parameter_name) {
+  data.frame(
+    parameter = parameter_name,
+    posterior_mean = mean(x),
+    posterior_median = median(x),
+    posterior_sd = sd(x),
+    lower_95_CrI = unname(quantile(x, 0.025)),
+    upper_95_CrI = unname(quantile(x, 0.975)),
+    number_of_draws = length(x)
+  )
+}
+
+posterior_summary <- bind_rows(
+  summarise_parameter(post$Se_pcr, "PCR sensitivity"),
+  summarise_parameter(post$Se_hct, "HCT/BCT sensitivity"),
+  summarise_parameter(post$Sp_pcr, "PCR specificity"),
+  summarise_parameter(post$Sp_hct, "HCT/BCT specificity")
+)
+
+readme <- data.frame(
+  item = c(
+    "Workbook description",
+    "Posterior_draws",
+    "Prior_curve",
+    "Posterior_summary",
+    "Prior specification",
+    "Credible intervals"
+  ),
+  description = c(
+    "Source data underlying the diagnostic sensitivity and specificity plots.",
+    paste(
+      "Retained posterior samples for PCR and HCT/BCT sensitivity",
+      "and specificity. Each row is one posterior draw."
+    ),
+    paste(
+      "Analytical probability-density curve for the",
+      "LogitNormal(0,1) prior used for sensitivity and specificity."
+    ),
+    paste(
+      "Posterior means, medians, standard deviations and",
+      "equal-tailed 95% credible intervals."
+    ),
+    "logit(parameter) ~ Normal(0,1).",
+    "2.5th and 97.5th percentiles of the posterior draws."
+  )
+)
+
+# ------------------------------------------------------------
+# Create one workbook containing all outputs
+# ------------------------------------------------------------
+
+wb <- createWorkbook(
+  creator = "AR Kaye",
+  title = "Diagnostic test performance source data",
+  subject = "Source data for sensitivity and specificity figure"
+)
+
+addWorksheet(wb, "README")
+addWorksheet(wb, "Posterior_draws")
+addWorksheet(wb, "Prior_curve")
+addWorksheet(wb, "Posterior_summary")
+
+writeData(wb, "README", readme)
+writeData(wb, "Posterior_draws", posterior_draws)
+writeData(wb, "Prior_curve", prior_curve)
+writeData(wb, "Posterior_summary", posterior_summary)
+
+# ------------------------------------------------------------
+# Formatting
+# ------------------------------------------------------------
+
+header_style <- createStyle(
+  fontColour = "#FFFFFF",
+  fgFill = "#1F4E78",
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  border = "bottom",
+  borderColour = "#FFFFFF"
+)
+
+decimal_style <- createStyle(numFmt = "0.000000")
+integer_style <- createStyle(numFmt = "0")
+wrap_style <- createStyle(
+  wrapText = TRUE,
+  valign = "top"
+)
+
+# README
+addStyle(
+  wb,
+  sheet = "README",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(readme),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "README",
+  style = wrap_style,
+  rows = 2:(nrow(readme) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+setColWidths(wb, "README", cols = 1, widths = 24)
+setColWidths(wb, "README", cols = 2, widths = 80)
+freezePane(wb, "README", firstRow = TRUE)
+
+# Posterior draws
+addStyle(
+  wb,
+  sheet = "Posterior_draws",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(posterior_draws),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Posterior_draws",
+  style = integer_style,
+  rows = 2:(nrow(posterior_draws) + 1),
+  cols = 1,
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Posterior_draws",
+  style = decimal_style,
+  rows = 2:(nrow(posterior_draws) + 1),
+  cols = 2:5,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  "Posterior_draws",
+  cols = 1:ncol(posterior_draws),
+  widths = "auto"
+)
+
+freezePane(wb, "Posterior_draws", firstRow = TRUE)
+addFilter(
+  wb,
+  "Posterior_draws",
+  row = 1,
+  cols = 1:ncol(posterior_draws)
+)
+
+# Prior curve
+addStyle(
+  wb,
+  sheet = "Prior_curve",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(prior_curve),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Prior_curve",
+  style = decimal_style,
+  rows = 2:(nrow(prior_curve) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  "Prior_curve",
+  cols = 1:ncol(prior_curve),
+  widths = "auto"
+)
+
+freezePane(wb, "Prior_curve", firstRow = TRUE)
+addFilter(
+  wb,
+  "Prior_curve",
+  row = 1,
+  cols = 1:ncol(prior_curve)
+)
+
+# Posterior summaries
+addStyle(
+  wb,
+  sheet = "Posterior_summary",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(posterior_summary),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Posterior_summary",
+  style = decimal_style,
+  rows = 2:(nrow(posterior_summary) + 1),
+  cols = 2:6,
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Posterior_summary",
+  style = integer_style,
+  rows = 2:(nrow(posterior_summary) + 1),
+  cols = 7,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  "Posterior_summary",
+  cols = 1:ncol(posterior_summary),
+  widths = "auto"
+)
+
+freezePane(wb, "Posterior_summary", firstRow = TRUE)
+addFilter(
+  wb,
+  "Posterior_summary",
+  row = 1,
+  cols = 1:ncol(posterior_summary)
+)
+
+# ------------------------------------------------------------
+# Save the single Excel workbook
+# ------------------------------------------------------------
+
+output_file <- "Code/TestSensSpec/Figure_1_source_data.xlsx"
+
+saveWorkbook(
+  wb,
+  file = output_file,
+  overwrite = TRUE
+)
+
+message("Saved source-data workbook to: ", output_file)

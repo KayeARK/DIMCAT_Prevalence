@@ -787,3 +787,339 @@ print(p_upper_transparent)
 grid.draw(p_mean_combined)
 grid.draw(p_lower_combined)
 grid.draw(p_upper_combined)
+
+
+
+
+
+
+
+# ============================================================
+# FIGURE 3 SOURCE DATA — CORRECTED
+# One row per GADM level-3 Ethiopian administrative area
+# ============================================================
+
+library(openxlsx)
+library(dplyr)
+library(sf)
+
+output_dir <- "Code/Prevalence/Bovine BCT and PCR/Analysis_ETH"
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# ------------------------------------------------------------
+# 1. Create a unique lookup table for level-3 areas
+# ------------------------------------------------------------
+
+area_lookup <- ethiopia_zones_sf %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    GID_3,
+    Region = NAME_1,
+    Zone = NAME_2,
+    District = NAME_3
+  ) %>%
+  dplyr::distinct(GID_3, .keep_all = TRUE)
+
+# ------------------------------------------------------------
+# 2. Extract only the prevalence values from each result
+# ------------------------------------------------------------
+
+figure3_mean <- zone_prevalence_mean %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    GID_3,
+    Mean_prevalence = mean_prevalence
+  ) %>%
+  dplyr::distinct(GID_3, .keep_all = TRUE)
+
+figure3_lower <- zone_prevalence_lower %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    GID_3,
+    Lower_2.5_percentile = lower_prevalence
+  ) %>%
+  dplyr::distinct(GID_3, .keep_all = TRUE)
+
+figure3_upper <- zone_prevalence_upper %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    GID_3,
+    Upper_97.5_percentile = upper_prevalence
+  ) %>%
+  dplyr::distinct(GID_3, .keep_all = TRUE)
+
+# ------------------------------------------------------------
+# 3. Join strictly using the unique level-3 identifier
+# ------------------------------------------------------------
+
+figure3_area_prevalence <- area_lookup %>%
+  left_join(
+    figure3_mean,
+    by = "GID_3",
+    relationship = "one-to-one"
+  ) %>%
+  left_join(
+    figure3_lower,
+    by = "GID_3",
+    relationship = "one-to-one"
+  ) %>%
+  left_join(
+    figure3_upper,
+    by = "GID_3",
+    relationship = "one-to-one"
+  ) %>%
+  arrange(Region, Zone, District)
+
+# Check that there is exactly one row per mapped area
+stopifnot(
+  nrow(figure3_area_prevalence) ==
+    dplyr::n_distinct(figure3_area_prevalence$GID_3)
+)
+
+cat(
+  "Number of unique level-3 administrative areas:",
+  nrow(figure3_area_prevalence),
+  "\n"
+)
+
+# ------------------------------------------------------------
+# 4. Survey points plotted over the maps
+# ------------------------------------------------------------
+
+if (!is.null(bovine_ethiopia_sf) && nrow(bovine_ethiopia_sf) > 0) {
+
+  figure3_survey_points <- bovine_ethiopia_sf %>%
+    st_drop_geometry() %>%
+    transmute(
+      Longitude = lon,
+      Latitude = lat,
+      Sample_size = Number_of_animal_tested,
+      Test_type = as.character(Test_Type)
+    ) %>%
+    arrange(Test_type, Longitude, Latitude)
+
+} else {
+
+  figure3_survey_points <- data.frame(
+    Longitude = numeric(0),
+    Latitude = numeric(0),
+    Sample_size = integer(0),
+    Test_type = character(0)
+  )
+}
+
+# ------------------------------------------------------------
+# 5. README
+# ------------------------------------------------------------
+
+figure3_readme <- data.frame(
+  Item = c(
+    "Workbook description",
+    "Associated figure",
+    "Area_prevalence sheet",
+    "GID_3",
+    "Region",
+    "Zone",
+    "District",
+    "Mean_prevalence",
+    "Lower_2.5_percentile",
+    "Upper_97.5_percentile",
+    "Survey_points sheet",
+    "Longitude and Latitude",
+    "Sample_size",
+    "Test_type",
+    "Units"
+  ),
+  Description = c(
+    paste(
+      "Source data underlying Figure 3, including level-3",
+      "administrative-area AAT prevalence estimates for Ethiopia",
+      "and the survey observations plotted over the maps."
+    ),
+    "Figure 3.",
+    paste(
+      "One row per GADM level-3 Ethiopian administrative area.",
+      "The prevalence columns contain the values used to colour",
+      "the mean, lower and upper prevalence maps."
+    ),
+    "Unique GADM level-3 administrative-area identifier.",
+    "First-level Ethiopian administrative region.",
+    "Second-level Ethiopian administrative zone.",
+    "Third-level Ethiopian administrative area represented by the polygon.",
+    "Mean modelled AAT prevalence for the level-3 area.",
+    "Lower 2.5th percentile of modelled AAT prevalence.",
+    "Upper 97.5th percentile of modelled AAT prevalence.",
+    "Survey observations plotted over the prevalence maps.",
+    "Geographic coordinates in decimal degrees, WGS84.",
+    "Number of cattle tested; used to determine point size.",
+    "Diagnostic-test category; used to determine point shape.",
+    "Prevalence values are proportions ranging from 0 to 1."
+  ),
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 6. Create one workbook
+# ------------------------------------------------------------
+
+wb <- createWorkbook(
+  creator = "AR Kaye",
+  title = "Figure 3 source data",
+  subject = paste(
+    "Ethiopian administrative-area bovine trypanosomosis",
+    "prevalence and survey-point source data"
+  ),
+  category = "Research data"
+)
+
+addWorksheet(wb, "README")
+addWorksheet(wb, "Area_prevalence")
+addWorksheet(wb, "Survey_points")
+
+writeData(wb, "README", figure3_readme)
+writeData(wb, "Area_prevalence", figure3_area_prevalence)
+writeData(wb, "Survey_points", figure3_survey_points)
+
+# ------------------------------------------------------------
+# 7. Formatting
+# ------------------------------------------------------------
+
+header_style <- createStyle(
+  fontColour = "#FFFFFF",
+  fgFill = "#1F4E78",
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  border = "bottom",
+  borderColour = "#FFFFFF"
+)
+
+prevalence_style <- createStyle(numFmt = "0.000000")
+coordinate_style <- createStyle(numFmt = "0.000000")
+integer_style <- createStyle(numFmt = "0")
+wrap_style <- createStyle(wrapText = TRUE, valign = "top")
+
+# README
+addStyle(
+  wb,
+  "README",
+  header_style,
+  rows = 1,
+  cols = 1:ncol(figure3_readme),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  "README",
+  wrap_style,
+  rows = 2:(nrow(figure3_readme) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+setColWidths(wb, "README", cols = 1, widths = 26)
+setColWidths(wb, "README", cols = 2, widths = 80)
+freezePane(wb, "README", firstRow = TRUE)
+
+# Area prevalence
+addStyle(
+  wb,
+  "Area_prevalence",
+  header_style,
+  rows = 1,
+  cols = 1:ncol(figure3_area_prevalence),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  "Area_prevalence",
+  prevalence_style,
+  rows = 2:(nrow(figure3_area_prevalence) + 1),
+  cols = 5:7,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  "Area_prevalence",
+  cols = 1:ncol(figure3_area_prevalence),
+  widths = "auto"
+)
+
+freezePane(wb, "Area_prevalence", firstRow = TRUE)
+
+addFilter(
+  wb,
+  "Area_prevalence",
+  row = 1,
+  cols = 1:ncol(figure3_area_prevalence)
+)
+
+# Survey points
+addStyle(
+  wb,
+  "Survey_points",
+  header_style,
+  rows = 1,
+  cols = 1:ncol(figure3_survey_points),
+  gridExpand = TRUE
+)
+
+if (nrow(figure3_survey_points) > 0) {
+
+  addStyle(
+    wb,
+    "Survey_points",
+    coordinate_style,
+    rows = 2:(nrow(figure3_survey_points) + 1),
+    cols = 1:2,
+    gridExpand = TRUE
+  )
+
+  addStyle(
+    wb,
+    "Survey_points",
+    integer_style,
+    rows = 2:(nrow(figure3_survey_points) + 1),
+    cols = 3,
+    gridExpand = TRUE
+  )
+}
+
+setColWidths(
+  wb,
+  "Survey_points",
+  cols = 1:ncol(figure3_survey_points),
+  widths = "auto"
+)
+
+freezePane(wb, "Survey_points", firstRow = TRUE)
+
+addFilter(
+  wb,
+  "Survey_points",
+  row = 1,
+  cols = 1:ncol(figure3_survey_points)
+)
+
+# ------------------------------------------------------------
+# 8. Save
+# ------------------------------------------------------------
+
+figure3_output_file <- file.path(
+  output_dir,
+  "Figure_3_source_data.xlsx"
+)
+
+saveWorkbook(
+  wb,
+  file = figure3_output_file,
+  overwrite = TRUE
+)
+
+message(
+  "Figure 3 source-data workbook saved to: ",
+  figure3_output_file
+)

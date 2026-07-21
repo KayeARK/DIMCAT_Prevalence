@@ -510,3 +510,1083 @@ ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/Cattle_at_risk_fine_plot
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/Cattle_at_risk_fine_plots/eth_cattle_at_risk_lower_log_analysis.pdf", plot = p_lower_log_combined, width = 10, height = 6)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/Cattle_at_risk_fine_plots/eth_cattle_at_risk_upper_log_analysis.pdf", plot = p_upper_log_combined, width = 10, height = 6)
 
+
+
+
+
+
+# ============================================================
+# FIGURE 5B SOURCE DATA
+#
+# Exports the data required to reconstruct:
+#   1. Mean cattle-at-risk choropleth
+#   2. Lower 2.5th-percentile choropleth
+#   3. Upper 97.5th-percentile choropleth
+#   4. Log10-transformed choropleths
+#   5. Histograms and boxplots
+#   6. Survey-point overlays
+#   7. Tsetse-risk categories
+#   8. Manual exclusions
+#
+# This block deliberately follows the existing plotting code.
+# ============================================================
+
+library(openxlsx)
+
+# Always use explicit namespace because raster::select can mask
+# dplyr::select.
+
+figure5b_output_dir <- paste0(
+  "Code/Prevalence/Bovine BCT and PCR/",
+  "Analysis_ETH/Cattle_at_risk_fine_plots"
+)
+
+dir.create(
+  figure5b_output_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+# ------------------------------------------------------------
+# 1. Administrative polygon lookup
+# ------------------------------------------------------------
+
+figure5b_polygon_lookup <- ethiopia_zones_sf |>
+  sf::st_drop_geometry() |>
+  dplyr::transmute(
+    GID_3 = as.character(GID_3),
+    Region = as.character(NAME_1),
+    Zone = as.character(NAME_2),
+    Administrative_area = as.character(NAME_3)
+  )
+
+stopifnot(
+  nrow(figure5b_polygon_lookup) ==
+    dplyr::n_distinct(figure5b_polygon_lookup$GID_3)
+)
+
+figure5b_repeated_names <- figure5b_polygon_lookup |>
+  dplyr::count(
+    Administrative_area,
+    name = "Number_of_GADM_polygons"
+  ) |>
+  dplyr::filter(
+    Number_of_GADM_polygons > 1
+  ) |>
+  dplyr::arrange(
+    dplyr::desc(Number_of_GADM_polygons),
+    Administrative_area
+  )
+
+# ------------------------------------------------------------
+# 2. Exact source objects used by the plotting functions
+# ------------------------------------------------------------
+
+figure5b_mean_source <- zone_cattle_at_risk_mean |>
+  sf::st_drop_geometry() |>
+  dplyr::transmute(
+    Source_row_ID = dplyr::row_number(),
+    Administrative_area = as.character(NAME_3),
+    Region_from_source = as.character(NAME_1),
+    Zone_from_source = as.character(NAME_2),
+    Mean_cattle_at_risk =
+      as.numeric(mean_cattle_at_risk),
+    Mean_log10_cattle_at_risk =
+      as.numeric(log_cattle_at_risk),
+    Risk_value =
+      as.numeric(risk_value),
+    Tsetse_mean =
+      as.numeric(tsetse_mean),
+    Tsetse_zone =
+      as.logical(tsetse_zone),
+    Mean_risk_category =
+      as.character(risk_category)
+  )
+
+figure5b_lower_source <- zone_cattle_at_risk_lower |>
+  sf::st_drop_geometry() |>
+  dplyr::transmute(
+    Source_row_ID = dplyr::row_number(),
+    Administrative_area = as.character(NAME_3),
+    Region_from_source = as.character(NAME_1),
+    Zone_from_source = as.character(NAME_2),
+    Lower_2.5_cattle_at_risk =
+      as.numeric(lower_cattle_at_risk),
+    Mean_cattle_at_risk_in_lower_object =
+      as.numeric(mean_cattle_at_risk),
+    Lower_log10_cattle_at_risk =
+      as.numeric(log_cattle_at_risk),
+    Risk_value =
+      as.numeric(risk_value),
+    Tsetse_mean =
+      as.numeric(tsetse_mean),
+    Tsetse_zone =
+      as.logical(tsetse_zone),
+    Lower_risk_category =
+      as.character(risk_category)
+  )
+
+figure5b_upper_source <- zone_cattle_at_risk_upper |>
+  sf::st_drop_geometry() |>
+  dplyr::transmute(
+    Source_row_ID = dplyr::row_number(),
+    Administrative_area = as.character(NAME_3),
+    Region_from_source = as.character(NAME_1),
+    Zone_from_source = as.character(NAME_2),
+    Upper_97.5_cattle_at_risk =
+      as.numeric(upper_cattle_at_risk),
+    Mean_cattle_at_risk_in_upper_object =
+      as.numeric(mean_cattle_at_risk),
+    Upper_log10_cattle_at_risk =
+      as.numeric(log_cattle_at_risk),
+    Risk_value =
+      as.numeric(risk_value),
+    Tsetse_mean =
+      as.numeric(tsetse_mean),
+    Tsetse_zone =
+      as.logical(tsetse_zone),
+    Upper_risk_category =
+      as.character(risk_category)
+  )
+
+# ------------------------------------------------------------
+# 3. Recreate the exact joins used by the maps
+# ------------------------------------------------------------
+
+# These joins intentionally allow many-to-many matching because
+# that is how the existing map code behaves when NAME_3 occurs
+# more than once.
+
+figure5b_mean_map <- figure5b_polygon_lookup |>
+  dplyr::left_join(
+    figure5b_mean_source,
+    by = "Administrative_area",
+    relationship = "many-to-many"
+  ) |>
+  dplyr::mutate(
+    Map_row_ID = dplyr::row_number()
+  ) |>
+  dplyr::select(
+    Map_row_ID,
+    GID_3,
+    Region,
+    Zone,
+    Administrative_area,
+    Source_row_ID,
+    Region_from_source,
+    Zone_from_source,
+    Mean_cattle_at_risk,
+    Mean_log10_cattle_at_risk,
+    Risk_value,
+    Tsetse_mean,
+    Tsetse_zone,
+    Mean_risk_category
+  )
+
+figure5b_lower_map <- figure5b_polygon_lookup |>
+  dplyr::left_join(
+    figure5b_lower_source,
+    by = "Administrative_area",
+    relationship = "many-to-many"
+  ) |>
+  dplyr::mutate(
+    Map_row_ID = dplyr::row_number()
+  ) |>
+  dplyr::select(
+    Map_row_ID,
+    GID_3,
+    Region,
+    Zone,
+    Administrative_area,
+    Source_row_ID,
+    Region_from_source,
+    Zone_from_source,
+    Lower_2.5_cattle_at_risk,
+    Mean_cattle_at_risk_in_lower_object,
+    Lower_log10_cattle_at_risk,
+    Risk_value,
+    Tsetse_mean,
+    Tsetse_zone,
+    Lower_risk_category
+  )
+
+figure5b_upper_map <- figure5b_polygon_lookup |>
+  dplyr::left_join(
+    figure5b_upper_source,
+    by = "Administrative_area",
+    relationship = "many-to-many"
+  ) |>
+  dplyr::mutate(
+    Map_row_ID = dplyr::row_number()
+  ) |>
+  dplyr::select(
+    Map_row_ID,
+    GID_3,
+    Region,
+    Zone,
+    Administrative_area,
+    Source_row_ID,
+    Region_from_source,
+    Zone_from_source,
+    Upper_97.5_cattle_at_risk,
+    Mean_cattle_at_risk_in_upper_object,
+    Upper_log10_cattle_at_risk,
+    Risk_value,
+    Tsetse_mean,
+    Tsetse_zone,
+    Upper_risk_category
+  )
+
+# ------------------------------------------------------------
+# 4. Map values in long format
+# ------------------------------------------------------------
+
+figure5b_map_values <- dplyr::bind_rows(
+
+  figure5b_mean_map |>
+    dplyr::transmute(
+      Map_row_ID,
+      GID_3,
+      Region,
+      Zone,
+      Administrative_area,
+      Source_row_ID,
+      Estimate = "Mean",
+      Scale = "Raw",
+      Plotted_value = Mean_cattle_at_risk,
+      Risk_category = Mean_risk_category,
+      Tsetse_mean,
+      Tsetse_zone
+    ),
+
+  figure5b_mean_map |>
+    dplyr::transmute(
+      Map_row_ID,
+      GID_3,
+      Region,
+      Zone,
+      Administrative_area,
+      Source_row_ID,
+      Estimate = "Mean",
+      Scale = "Log10",
+      Plotted_value = Mean_log10_cattle_at_risk,
+      Risk_category = Mean_risk_category,
+      Tsetse_mean,
+      Tsetse_zone
+    ),
+
+  figure5b_lower_map |>
+    dplyr::transmute(
+      Map_row_ID,
+      GID_3,
+      Region,
+      Zone,
+      Administrative_area,
+      Source_row_ID,
+      Estimate = "Lower 2.5th percentile",
+      Scale = "Raw",
+      Plotted_value = Lower_2.5_cattle_at_risk,
+      Risk_category = Lower_risk_category,
+      Tsetse_mean,
+      Tsetse_zone
+    ),
+
+  figure5b_lower_map |>
+    dplyr::transmute(
+      Map_row_ID,
+      GID_3,
+      Region,
+      Zone,
+      Administrative_area,
+      Source_row_ID,
+      Estimate = "Lower 2.5th percentile",
+      Scale = "Log10",
+      Plotted_value = Lower_log10_cattle_at_risk,
+      Risk_category = Lower_risk_category,
+      Tsetse_mean,
+      Tsetse_zone
+    ),
+
+  figure5b_upper_map |>
+    dplyr::transmute(
+      Map_row_ID,
+      GID_3,
+      Region,
+      Zone,
+      Administrative_area,
+      Source_row_ID,
+      Estimate = "Upper 97.5th percentile",
+      Scale = "Raw",
+      Plotted_value = Upper_97.5_cattle_at_risk,
+      Risk_category = Upper_risk_category,
+      Tsetse_mean,
+      Tsetse_zone
+    ),
+
+  figure5b_upper_map |>
+    dplyr::transmute(
+      Map_row_ID,
+      GID_3,
+      Region,
+      Zone,
+      Administrative_area,
+      Source_row_ID,
+      Estimate = "Upper 97.5th percentile",
+      Scale = "Log10",
+      Plotted_value = Upper_log10_cattle_at_risk,
+      Risk_category = Upper_risk_category,
+      Tsetse_mean,
+      Tsetse_zone
+    )
+
+) |>
+  dplyr::mutate(
+    Manually_excluded =
+      Administrative_area %in%
+        problem_regions_to_exclude
+  ) |>
+  dplyr::arrange(
+    Scale,
+    Estimate,
+    Region,
+    Zone,
+    Administrative_area,
+    GID_3,
+    Map_row_ID
+  )
+
+# ------------------------------------------------------------
+# 5. Exact values used by histograms and boxplots
+# ------------------------------------------------------------
+
+# This follows create_combined_plot() exactly:
+# raw plots use mean_cattle_at_risk for all three supplied
+# objects; log plots use each object's log_cattle_at_risk.
+
+figure5b_distribution_values <- dplyr::bind_rows(
+
+  figure5b_mean_source |>
+    dplyr::transmute(
+      Source_row_ID,
+      Region = Region_from_source,
+      Zone = Zone_from_source,
+      Administrative_area,
+      Plot_label = "Mean",
+      Scale = "Raw",
+      Source_object = "zone_cattle_at_risk_mean",
+      Source_column = "mean_cattle_at_risk",
+      Plotted_value = Mean_cattle_at_risk
+    ),
+
+  figure5b_lower_source |>
+    dplyr::transmute(
+      Source_row_ID,
+      Region = Region_from_source,
+      Zone = Zone_from_source,
+      Administrative_area,
+      Plot_label = "Lower 2.5th percentile",
+      Scale = "Raw",
+      Source_object = "zone_cattle_at_risk_lower",
+      Source_column = "mean_cattle_at_risk",
+      Plotted_value =
+        Mean_cattle_at_risk_in_lower_object
+    ),
+
+  figure5b_upper_source |>
+    dplyr::transmute(
+      Source_row_ID,
+      Region = Region_from_source,
+      Zone = Zone_from_source,
+      Administrative_area,
+      Plot_label = "Upper 97.5th percentile",
+      Scale = "Raw",
+      Source_object = "zone_cattle_at_risk_upper",
+      Source_column = "mean_cattle_at_risk",
+      Plotted_value =
+        Mean_cattle_at_risk_in_upper_object
+    ),
+
+  figure5b_mean_source |>
+    dplyr::transmute(
+      Source_row_ID,
+      Region = Region_from_source,
+      Zone = Zone_from_source,
+      Administrative_area,
+      Plot_label = "Mean",
+      Scale = "Log10",
+      Source_object = "zone_cattle_at_risk_mean",
+      Source_column = "log_cattle_at_risk",
+      Plotted_value =
+        Mean_log10_cattle_at_risk
+    ),
+
+  figure5b_lower_source |>
+    dplyr::transmute(
+      Source_row_ID,
+      Region = Region_from_source,
+      Zone = Zone_from_source,
+      Administrative_area,
+      Plot_label = "Lower 2.5th percentile",
+      Scale = "Log10",
+      Source_object = "zone_cattle_at_risk_lower",
+      Source_column = "log_cattle_at_risk",
+      Plotted_value =
+        Lower_log10_cattle_at_risk
+    ),
+
+  figure5b_upper_source |>
+    dplyr::transmute(
+      Source_row_ID,
+      Region = Region_from_source,
+      Zone = Zone_from_source,
+      Administrative_area,
+      Plot_label = "Upper 97.5th percentile",
+      Scale = "Log10",
+      Source_object = "zone_cattle_at_risk_upper",
+      Source_column = "log_cattle_at_risk",
+      Plotted_value =
+        Upper_log10_cattle_at_risk
+    )
+
+) |>
+  dplyr::filter(
+    !is.na(Plotted_value)
+  ) |>
+  dplyr::arrange(
+    Scale,
+    Plot_label,
+    Source_row_ID
+  )
+
+# ------------------------------------------------------------
+# 6. Estimate-specific values
+# ------------------------------------------------------------
+
+# This sheet contains the actual mean, lower and upper values,
+# irrespective of the current histogram-function column choice.
+
+figure5b_estimate_values <- dplyr::bind_rows(
+
+  figure5b_mean_source |>
+    dplyr::transmute(
+      Source_row_ID,
+      Region = Region_from_source,
+      Zone = Zone_from_source,
+      Administrative_area,
+      Estimate = "Mean",
+      Raw_value = Mean_cattle_at_risk,
+      Log10_value = Mean_log10_cattle_at_risk
+    ),
+
+  figure5b_lower_source |>
+    dplyr::transmute(
+      Source_row_ID,
+      Region = Region_from_source,
+      Zone = Zone_from_source,
+      Administrative_area,
+      Estimate = "Lower 2.5th percentile",
+      Raw_value = Lower_2.5_cattle_at_risk,
+      Log10_value = Lower_log10_cattle_at_risk
+    ),
+
+  figure5b_upper_source |>
+    dplyr::transmute(
+      Source_row_ID,
+      Region = Region_from_source,
+      Zone = Zone_from_source,
+      Administrative_area,
+      Estimate = "Upper 97.5th percentile",
+      Raw_value = Upper_97.5_cattle_at_risk,
+      Log10_value = Upper_log10_cattle_at_risk
+    )
+
+) |>
+  dplyr::arrange(
+    Estimate,
+    Region,
+    Zone,
+    Administrative_area,
+    Source_row_ID
+  )
+
+# ------------------------------------------------------------
+# 7. Survey points
+# ------------------------------------------------------------
+
+if (
+  exists("bovine_ethiopia_sf") &&
+  !is.null(bovine_ethiopia_sf) &&
+  nrow(bovine_ethiopia_sf) > 0
+) {
+
+  figure5b_survey_points <- bovine_ethiopia_sf |>
+    sf::st_drop_geometry() |>
+    dplyr::transmute(
+      Survey_point_ID = dplyr::row_number(),
+      Longitude = as.numeric(lon),
+      Latitude = as.numeric(lat),
+      Sample_size =
+        as.integer(Number_of_animal_tested),
+      Number_infected =
+        as.integer(Number_of_infections),
+      Observed_prevalence =
+        as.numeric(Prevalence),
+      Test_type = dplyr::case_when(
+        Test_Type == "BCT/HCT" ~ "HCT/BCT",
+        Test_Type == "BCT" ~ "HCT/BCT",
+        Test_Type == "PCR" ~ "PCR",
+        TRUE ~ as.character(Test_Type)
+      )
+    ) |>
+    dplyr::arrange(
+      Test_type,
+      Longitude,
+      Latitude
+    )
+
+} else {
+
+  figure5b_survey_points <- data.frame(
+    Survey_point_ID = integer(0),
+    Longitude = numeric(0),
+    Latitude = numeric(0),
+    Sample_size = integer(0),
+    Number_infected = integer(0),
+    Observed_prevalence = numeric(0),
+    Test_type = character(0)
+  )
+}
+
+# ------------------------------------------------------------
+# 8. Manual exclusions
+# ------------------------------------------------------------
+
+figure5b_manual_exclusions <- data.frame(
+  Administrative_area =
+    problem_regions_to_exclude,
+
+  Applied_action =
+    paste(
+      "Mean, lower and upper cattle-at-risk values",
+      "set to zero"
+    ),
+
+  Matching_method =
+    "Matched using cattle_summary_data$region",
+
+  Reason = paste(
+    "Estimated cattle at risk occurred without tsetse",
+    "presence and was treated as a spatial-processing",
+    "artefact."
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 9. Plot settings
+# ------------------------------------------------------------
+
+figure5b_plot_settings <- data.frame(
+  Setting = c(
+    "Administrative polygons",
+    "Polygon identifier",
+    "Map join field",
+    "Map relationship",
+    "Raw map colour limits",
+    "Log map colour limits",
+    "Log transformation",
+    "Colour palette",
+    "Histogram bins",
+    "Histogram boundary",
+    "Histogram closure",
+    "Boxplot width",
+    "No cattle but tsetse risk",
+    "No risk or cattle",
+    "Tsetse classification",
+    "Survey CRS"
+  ),
+
+  Value = c(
+    "Ethiopia GADM level 3",
+    "GID_3",
+    "NAME_3",
+    "Many-to-many retained to reproduce plotting code",
+    "0 to 500000",
+    "0 to 5.6",
+    "log10(cattle at risk + 1)",
+    "viridis plasma",
+    "30",
+    "0",
+    "Left-closed",
+    "0.8",
+    "Light blue",
+    "Light grey",
+    "tsetse_mean > 0",
+    "WGS84, EPSG:4326"
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 10. README
+# ------------------------------------------------------------
+
+figure5b_readme <- data.frame(
+  Item = c(
+    "Workbook description",
+    "Associated figure",
+    "Map_values sheet",
+    "Distribution_values sheet",
+    "Estimate_values sheet",
+    "Survey_points sheet",
+    "Repeated_names sheet",
+    "Manual_exclusions sheet",
+    "Plot_settings sheet",
+    "Administrative geometry",
+    "Repeated administrative names",
+    "Units"
+  ),
+
+  Description = c(
+    paste(
+      "Source data underlying Figure 5B, including",
+      "Ethiopian cattle-at-risk choropleths,",
+      "histograms, boxplots and survey overlays."
+    ),
+
+    "Figure 5B.",
+
+    paste(
+      "Exact rows produced by joining GADM level-3",
+      "polygons to the mean, lower and upper cattle-risk",
+      "objects using NAME_3."
+    ),
+
+    paste(
+      "Exact numerical values passed to the current",
+      "histogram and boxplot function."
+    ),
+
+    paste(
+      "Actual mean, lower and upper cattle-at-risk",
+      "estimates in raw and log10 form."
+    ),
+
+    "Survey points retained within Ethiopia.",
+
+    paste(
+      "Administrative names occurring in more than one",
+      "GADM level-3 polygon."
+    ),
+
+    "Administrative names manually assigned zero risk.",
+
+    paste(
+      "Binning, transformations, colour scales and",
+      "other reconstruction settings."
+    ),
+
+    paste(
+      "Polygon geometry is obtained separately from GADM",
+      "and is not embedded in the workbook."
+    ),
+
+    paste(
+      "Repeated names and corresponding many-to-many",
+      "map rows are retained because they are present in",
+      "the existing plotting workflow."
+    ),
+
+    "Cattle-at-risk values are estimated numbers of cattle."
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 11. Create workbook
+# ------------------------------------------------------------
+
+wb <- openxlsx::createWorkbook(
+  creator = "AR Kaye",
+  title = "Figure 5B source data",
+  subject = paste(
+    "Ethiopia cattle-at-risk maps, histograms and boxplots"
+  ),
+  category = "Research data"
+)
+
+openxlsx::addWorksheet(wb, "README")
+openxlsx::addWorksheet(wb, "Map_values")
+openxlsx::addWorksheet(wb, "Distribution_values")
+openxlsx::addWorksheet(wb, "Estimate_values")
+openxlsx::addWorksheet(wb, "Survey_points")
+openxlsx::addWorksheet(wb, "Repeated_names")
+openxlsx::addWorksheet(wb, "Manual_exclusions")
+openxlsx::addWorksheet(wb, "Plot_settings")
+
+openxlsx::writeData(
+  wb,
+  "README",
+  figure5b_readme
+)
+
+openxlsx::writeData(
+  wb,
+  "Map_values",
+  figure5b_map_values
+)
+
+openxlsx::writeData(
+  wb,
+  "Distribution_values",
+  figure5b_distribution_values
+)
+
+openxlsx::writeData(
+  wb,
+  "Estimate_values",
+  figure5b_estimate_values
+)
+
+openxlsx::writeData(
+  wb,
+  "Survey_points",
+  figure5b_survey_points
+)
+
+openxlsx::writeData(
+  wb,
+  "Repeated_names",
+  figure5b_repeated_names
+)
+
+openxlsx::writeData(
+  wb,
+  "Manual_exclusions",
+  figure5b_manual_exclusions
+)
+
+openxlsx::writeData(
+  wb,
+  "Plot_settings",
+  figure5b_plot_settings
+)
+
+# ------------------------------------------------------------
+# 12. Styling
+# ------------------------------------------------------------
+
+header_style <- openxlsx::createStyle(
+  fontColour = "#FFFFFF",
+  fgFill = "#1F4E78",
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  border = "bottom",
+  borderColour = "#FFFFFF"
+)
+
+count_style <- openxlsx::createStyle(
+  numFmt = "#,##0.000"
+)
+
+decimal_style <- openxlsx::createStyle(
+  numFmt = "0.000000"
+)
+
+integer_style <- openxlsx::createStyle(
+  numFmt = "0"
+)
+
+wrap_style <- openxlsx::createStyle(
+  wrapText = TRUE,
+  valign = "top"
+)
+
+format_data_sheet <- function(
+    workbook,
+    sheet_name,
+    data_object
+) {
+
+  if (ncol(data_object) < 1) {
+    return(invisible(NULL))
+  }
+
+  openxlsx::addStyle(
+    workbook,
+    sheet = sheet_name,
+    style = header_style,
+    rows = 1,
+    cols = seq_len(ncol(data_object)),
+    gridExpand = TRUE
+  )
+
+  openxlsx::setColWidths(
+    workbook,
+    sheet = sheet_name,
+    cols = seq_len(ncol(data_object)),
+    widths = "auto"
+  )
+
+  openxlsx::freezePane(
+    workbook,
+    sheet = sheet_name,
+    firstRow = TRUE
+  )
+
+  openxlsx::addFilter(
+    workbook,
+    sheet = sheet_name,
+    row = 1,
+    cols = seq_len(ncol(data_object))
+  )
+}
+
+format_data_sheet(
+  wb,
+  "Map_values",
+  figure5b_map_values
+)
+
+format_data_sheet(
+  wb,
+  "Distribution_values",
+  figure5b_distribution_values
+)
+
+format_data_sheet(
+  wb,
+  "Estimate_values",
+  figure5b_estimate_values
+)
+
+format_data_sheet(
+  wb,
+  "Survey_points",
+  figure5b_survey_points
+)
+
+format_data_sheet(
+  wb,
+  "Repeated_names",
+  figure5b_repeated_names
+)
+
+format_data_sheet(
+  wb,
+  "Manual_exclusions",
+  figure5b_manual_exclusions
+)
+
+# README
+openxlsx::addStyle(
+  wb,
+  "README",
+  header_style,
+  rows = 1,
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::addStyle(
+  wb,
+  "README",
+  wrap_style,
+  rows = 2:(nrow(figure5b_readme) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::setColWidths(
+  wb,
+  "README",
+  cols = 1,
+  widths = 30
+)
+
+openxlsx::setColWidths(
+  wb,
+  "README",
+  cols = 2,
+  widths = 90
+)
+
+openxlsx::freezePane(
+  wb,
+  "README",
+  firstRow = TRUE
+)
+
+# Plot settings
+openxlsx::addStyle(
+  wb,
+  "Plot_settings",
+  header_style,
+  rows = 1,
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::addStyle(
+  wb,
+  "Plot_settings",
+  wrap_style,
+  rows = 2:(nrow(figure5b_plot_settings) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::setColWidths(
+  wb,
+  "Plot_settings",
+  cols = 1,
+  widths = 36
+)
+
+openxlsx::setColWidths(
+  wb,
+  "Plot_settings",
+  cols = 2,
+  widths = 85
+)
+
+openxlsx::freezePane(
+  wb,
+  "Plot_settings",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# 13. Numeric formatting
+# ------------------------------------------------------------
+
+map_value_column <- match(
+  "Plotted_value",
+  names(figure5b_map_values)
+)
+
+if (
+  nrow(figure5b_map_values) > 0 &&
+  !is.na(map_value_column)
+) {
+  openxlsx::addStyle(
+    wb,
+    "Map_values",
+    count_style,
+    rows = 2:(nrow(figure5b_map_values) + 1),
+    cols = map_value_column,
+    gridExpand = TRUE
+  )
+}
+
+distribution_value_column <- match(
+  "Plotted_value",
+  names(figure5b_distribution_values)
+)
+
+if (
+  nrow(figure5b_distribution_values) > 0 &&
+  !is.na(distribution_value_column)
+) {
+  openxlsx::addStyle(
+    wb,
+    "Distribution_values",
+    count_style,
+    rows = 2:(nrow(figure5b_distribution_values) + 1),
+    cols = distribution_value_column,
+    gridExpand = TRUE
+  )
+}
+
+estimate_numeric_columns <- match(
+  c("Raw_value", "Log10_value"),
+  names(figure5b_estimate_values)
+)
+
+estimate_numeric_columns <- estimate_numeric_columns[
+  !is.na(estimate_numeric_columns)
+]
+
+if (
+  nrow(figure5b_estimate_values) > 0 &&
+  length(estimate_numeric_columns) > 0
+) {
+  openxlsx::addStyle(
+    wb,
+    "Estimate_values",
+    count_style,
+    rows = 2:(nrow(figure5b_estimate_values) + 1),
+    cols = estimate_numeric_columns,
+    gridExpand = TRUE
+  )
+}
+
+if (nrow(figure5b_survey_points) > 0) {
+
+  openxlsx::addStyle(
+    wb,
+    "Survey_points",
+    decimal_style,
+    rows = 2:(nrow(figure5b_survey_points) + 1),
+    cols = c(2, 3, 6),
+    gridExpand = TRUE
+  )
+
+  openxlsx::addStyle(
+    wb,
+    "Survey_points",
+    integer_style,
+    rows = 2:(nrow(figure5b_survey_points) + 1),
+    cols = c(1, 4, 5),
+    gridExpand = TRUE
+  )
+}
+
+# ------------------------------------------------------------
+# 14. Save workbook
+# ------------------------------------------------------------
+
+figure5b_output_file <- file.path(
+  figure5b_output_dir,
+  "Figure_5B_source_data.xlsx"
+)
+
+openxlsx::saveWorkbook(
+  wb,
+  file = figure5b_output_file,
+  overwrite = TRUE
+)
+
+message(
+  "Figure 5B source-data workbook saved to: ",
+  figure5b_output_file
+)
+
+message(
+  "Map values exported: ",
+  nrow(figure5b_map_values)
+)
+
+message(
+  "Distribution values exported: ",
+  nrow(figure5b_distribution_values)
+)
+
+message(
+  "Estimate-specific values exported: ",
+  nrow(figure5b_estimate_values)
+)
+
+message(
+  "Survey points exported: ",
+  nrow(figure5b_survey_points)
+)
+
+message(
+  "Repeated administrative names documented: ",
+  nrow(figure5b_repeated_names)
+)

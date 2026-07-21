@@ -593,3 +593,860 @@ ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Cattle_at_risk_fine_plot
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Cattle_at_risk_fine_plots/nga_cattle_at_risk_mean_log_analysis.pdf", plot = p_mean_log_combined, width = 10, height = 6)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Cattle_at_risk_fine_plots/nga_cattle_at_risk_lower_log_analysis.pdf", plot = p_lower_log_combined, width = 10, height = 6)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/Cattle_at_risk_fine_plots/nga_cattle_at_risk_upper_log_analysis.pdf", plot = p_upper_log_combined, width = 10, height = 6)
+
+
+
+
+
+# ============================================================
+# FIGURE 5A SOURCE DATA
+#
+# Source data for:
+#   1. Mean cattle-at-risk choropleth
+#   2. Lower 2.5th-percentile choropleth
+#   3. Upper 97.5th-percentile choropleth
+#   4. Log10-transformed choropleths
+#   5. Associated histograms and boxplots
+#   6. Survey points, where plotted
+#
+# Everything is written to one Excel workbook.
+# ============================================================
+
+library(openxlsx)
+library(dplyr)
+library(sf)
+
+# ------------------------------------------------------------
+# Output location
+# ------------------------------------------------------------
+
+output_dir <- paste0(
+  "Code/Prevalence/Bovine BCT and PCR/",
+  "Analysis_NGA/Cattle_at_risk_fine_plots"
+)
+
+dir.create(
+  output_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+# ------------------------------------------------------------
+# 1. Unique Nigerian LGA lookup
+# ------------------------------------------------------------
+
+# GID_2 is retained as the unique identifier because some LGA
+# names may not be unique across states.
+
+figure5a_lga_lookup <- nigeria_lgas_sf %>%
+  st_drop_geometry() %>%
+  transmute(
+    GID_2 = as.character(GID_2),
+    State = as.character(NAME_1),
+    LGA = as.character(NAME_2)
+  ) %>%
+  distinct(
+    GID_2,
+    .keep_all = TRUE
+  )
+
+stopifnot(
+  nrow(figure5a_lga_lookup) ==
+    n_distinct(figure5a_lga_lookup$GID_2)
+)
+
+# ------------------------------------------------------------
+# 2. Prepare mean cattle-at-risk values
+# ------------------------------------------------------------
+
+figure5a_mean_raw <- lga_cattle_at_risk_mean %>%
+  st_drop_geometry() %>%
+  transmute(
+    State = as.character(NAME_1),
+    LGA = as.character(NAME_2),
+    Mean_cattle_at_risk = as.numeric(mean_cattle_at_risk),
+    Mean_log10_cattle_at_risk = as.numeric(log_cattle_at_risk),
+    Risk_value = as.numeric(risk_value),
+    Tsetse_mean = as.numeric(tsetse_mean),
+    Tsetse_zone = as.logical(tsetse_zone),
+    Mean_risk_category = as.character(risk_category)
+  ) %>%
+  distinct(
+    State,
+    LGA,
+    .keep_all = TRUE
+  )
+
+# ------------------------------------------------------------
+# 3. Prepare lower cattle-at-risk values
+# ------------------------------------------------------------
+
+figure5a_lower_raw <- lga_cattle_at_risk_lower %>%
+  st_drop_geometry() %>%
+  transmute(
+    State = as.character(NAME_1),
+    LGA = as.character(NAME_2),
+    Lower_2.5_cattle_at_risk =
+      as.numeric(lower_cattle_at_risk),
+    Lower_log10_cattle_at_risk =
+      as.numeric(log_cattle_at_risk),
+    Lower_risk_category =
+      as.character(risk_category)
+  ) %>%
+  distinct(
+    State,
+    LGA,
+    .keep_all = TRUE
+  )
+
+# ------------------------------------------------------------
+# 4. Prepare upper cattle-at-risk values
+# ------------------------------------------------------------
+
+figure5a_upper_raw <- lga_cattle_at_risk_upper %>%
+  st_drop_geometry() %>%
+  transmute(
+    State = as.character(NAME_1),
+    LGA = as.character(NAME_2),
+    Upper_97.5_cattle_at_risk =
+      as.numeric(upper_cattle_at_risk),
+    Upper_log10_cattle_at_risk =
+      as.numeric(log_cattle_at_risk),
+    Upper_risk_category =
+      as.character(risk_category)
+  ) %>%
+  distinct(
+    State,
+    LGA,
+    .keep_all = TRUE
+  )
+
+# ------------------------------------------------------------
+# 5. Join values to unique LGA identifiers
+# ------------------------------------------------------------
+
+figure5a_lga_values <- figure5a_lga_lookup %>%
+  left_join(
+    figure5a_mean_raw,
+    by = c("State", "LGA"),
+    relationship = "one-to-one"
+  ) %>%
+  left_join(
+    figure5a_lower_raw,
+    by = c("State", "LGA"),
+    relationship = "one-to-one"
+  ) %>%
+  left_join(
+    figure5a_upper_raw,
+    by = c("State", "LGA"),
+    relationship = "one-to-one"
+  ) %>%
+  mutate(
+    # Recalculate transformed values as a reproducibility check
+    Recalculated_mean_log10 =
+      log10(Mean_cattle_at_risk + 1),
+
+    Recalculated_lower_log10 =
+      log10(Lower_2.5_cattle_at_risk + 1),
+
+    Recalculated_upper_log10 =
+      log10(Upper_97.5_cattle_at_risk + 1),
+
+    CI_width =
+      Upper_97.5_cattle_at_risk -
+      Lower_2.5_cattle_at_risk
+  ) %>%
+  arrange(
+    State,
+    LGA
+  )
+
+# Ensure there is exactly one row per polygon
+stopifnot(
+  nrow(figure5a_lga_values) ==
+    n_distinct(figure5a_lga_values$GID_2)
+)
+
+cat(
+  "Unique Nigerian LGAs exported:",
+  nrow(figure5a_lga_values),
+  "\n"
+)
+
+# ------------------------------------------------------------
+# 6. Determine high-uncertainty classification
+# ------------------------------------------------------------
+
+figure5a_ci_threshold <- quantile(
+  figure5a_lga_values$CI_width,
+  probs = 0.90,
+  na.rm = TRUE
+)
+
+figure5a_lga_values <- figure5a_lga_values %>%
+  mutate(
+    High_uncertainty =
+      !is.na(CI_width) &
+      CI_width > figure5a_ci_threshold
+  )
+
+# ------------------------------------------------------------
+# 7. Data used by histograms and boxplots
+# ------------------------------------------------------------
+
+# This long-format table makes it explicit which numerical
+# values should be supplied to each histogram and boxplot.
+
+figure5a_distribution_values <- bind_rows(
+
+  figure5a_lga_values %>%
+    transmute(
+      GID_2,
+      State,
+      LGA,
+      Estimate = "Mean",
+      Scale = "Raw",
+      Plotted_value = Mean_cattle_at_risk
+    ),
+
+  figure5a_lga_values %>%
+    transmute(
+      GID_2,
+      State,
+      LGA,
+      Estimate = "Lower 2.5th percentile",
+      Scale = "Raw",
+      Plotted_value = Lower_2.5_cattle_at_risk
+    ),
+
+  figure5a_lga_values %>%
+    transmute(
+      GID_2,
+      State,
+      LGA,
+      Estimate = "Upper 97.5th percentile",
+      Scale = "Raw",
+      Plotted_value = Upper_97.5_cattle_at_risk
+    ),
+
+  figure5a_lga_values %>%
+    transmute(
+      GID_2,
+      State,
+      LGA,
+      Estimate = "Mean",
+      Scale = "Log10",
+      Plotted_value = Mean_log10_cattle_at_risk
+    ),
+
+  figure5a_lga_values %>%
+    transmute(
+      GID_2,
+      State,
+      LGA,
+      Estimate = "Lower 2.5th percentile",
+      Scale = "Log10",
+      Plotted_value = Lower_log10_cattle_at_risk
+    ),
+
+  figure5a_lga_values %>%
+    transmute(
+      GID_2,
+      State,
+      LGA,
+      Estimate = "Upper 97.5th percentile",
+      Scale = "Log10",
+      Plotted_value = Upper_log10_cattle_at_risk
+    )
+
+) %>%
+  filter(
+    !is.na(Plotted_value)
+  ) %>%
+  arrange(
+    Scale,
+    Estimate,
+    State,
+    LGA
+  )
+
+# ------------------------------------------------------------
+# 8. Survey points plotted over the maps
+# ------------------------------------------------------------
+
+if (
+  !is.null(bovine_nigeria_sf) &&
+  nrow(bovine_nigeria_sf) > 0
+) {
+
+  figure5a_survey_points <- bovine_nigeria_sf %>%
+    st_drop_geometry() %>%
+    transmute(
+      Longitude = as.numeric(lon),
+      Latitude = as.numeric(lat),
+      Sample_size =
+        as.integer(Number_of_animal_tested),
+      Test_type = case_when(
+        Test_Type == "BCT/HCT" ~ "HCT/BCT",
+        Test_Type == "BCT" ~ "HCT/BCT",
+        Test_Type == "PCR" ~ "PCR",
+        TRUE ~ as.character(Test_Type)
+      )
+    ) %>%
+    arrange(
+      Test_type,
+      Longitude,
+      Latitude
+    )
+
+} else {
+
+  figure5a_survey_points <- data.frame(
+    Longitude = numeric(0),
+    Latitude = numeric(0),
+    Sample_size = integer(0),
+    Test_type = character(0)
+  )
+}
+
+# ------------------------------------------------------------
+# 9. Plot settings required for exact reconstruction
+# ------------------------------------------------------------
+
+figure5a_plot_settings <- data.frame(
+  Setting = c(
+    "Administrative level",
+    "Map identifier",
+    "Raw map fill variables",
+    "Log map transformation",
+    "Histogram bins",
+    "Histogram boundary",
+    "Histogram interval closure",
+    "Boxplot width",
+    "Colour palette",
+    "Raw colour-scale limit",
+    "Log colour-scale limit",
+    "High-uncertainty threshold",
+    "No cattle but tsetse risk",
+    "No cattle and no tsetse risk",
+    "Tsetse classification",
+    "Survey-point size variable",
+    "Survey-point shape variable",
+    "Coordinate reference system"
+  ),
+  Value = c(
+    "GADM level 2: Nigerian Local Government Areas",
+    "GID_2",
+    paste(
+      "Mean_cattle_at_risk; Lower_2.5_cattle_at_risk;",
+      "Upper_97.5_cattle_at_risk"
+    ),
+    "log10(cattle at risk + 1)",
+    "30",
+    "0",
+    "Left-closed",
+    "0.8",
+    "viridis plasma",
+    "0 to 5.6 in the supplied plotting script",
+    "0 to 5.6 in the supplied plotting script",
+    paste0(
+      "CI width greater than the 90th percentile: ",
+      format(
+        figure5a_ci_threshold,
+        scientific = FALSE,
+        digits = 10
+      )
+    ),
+    "Light blue",
+    "Light grey",
+    paste(
+      "Raster mean greater than zero or LGA located",
+      "in a manually specified tsetse state"
+    ),
+    "Number of animals tested",
+    "Diagnostic test type",
+    "WGS84, EPSG:4326"
+  ),
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 10. README
+# ------------------------------------------------------------
+
+figure5a_readme <- data.frame(
+  Item = c(
+    "Workbook description",
+    "Associated figure",
+    "LGA_values sheet",
+    "GID_2",
+    "Mean_cattle_at_risk",
+    "Lower_2.5_cattle_at_risk",
+    "Upper_97.5_cattle_at_risk",
+    "Log10 variables",
+    "Risk_value",
+    "Tsetse_mean",
+    "Tsetse_zone",
+    "Risk categories",
+    "CI_width",
+    "High_uncertainty",
+    "Distribution_values sheet",
+    "Survey_points sheet",
+    "Plot_settings sheet",
+    "Units",
+    "Administrative boundaries"
+  ),
+  Description = c(
+    paste(
+      "Source data underlying Figure 5A, including",
+      "LGA-level cattle-at-risk estimates, categorical",
+      "map classes, histogram and boxplot values, and",
+      "survey-point overlays."
+    ),
+    "Figure 5A.",
+    paste(
+      "One row per unique Nigerian GADM level-2",
+      "Local Government Area."
+    ),
+    paste(
+      "Unique GADM level-2 identifier used to prevent",
+      "duplication of LGAs with identical or similar names."
+    ),
+    "Mean estimated number of cattle at risk.",
+    paste(
+      "Lower 2.5th percentile of the estimated number",
+      "of cattle at risk."
+    ),
+    paste(
+      "Upper 97.5th percentile of the estimated number",
+      "of cattle at risk."
+    ),
+    paste(
+      "Base-10 logarithm of cattle at risk plus one,",
+      "used for the log-scale map and distribution plots."
+    ),
+    "Mean risk value retained from the cattle-risk summary data.",
+    "Mean binary tsetse-raster value within the LGA.",
+    paste(
+      "Logical indicator of whether the LGA was classified",
+      "as lying within a tsetse-risk area."
+    ),
+    paste(
+      "cattle_at_risk: estimated value greater than zero;",
+      "no_cattle_but_risk: zero cattle but tsetse present;",
+      "no_risk_or_cattle: no cattle and outside tsetse zone."
+    ),
+    paste(
+      "Difference between upper and lower cattle-at-risk",
+      "estimates."
+    ),
+    paste(
+      "Indicator that CI width exceeds the 90th percentile",
+      "of LGA-level CI widths."
+    ),
+    paste(
+      "Long-format numerical values used to construct",
+      "the six histogram and boxplot objects."
+    ),
+    paste(
+      "Survey locations plotted over applicable choropleths.",
+      "Point size represents sample size and point shape",
+      "represents test type."
+    ),
+    paste(
+      "Plot parameters needed to reproduce binning,",
+      "transformations and categorical map styling."
+    ),
+    "Cattle-at-risk values are estimated numbers of cattle.",
+    paste(
+      "Administrative polygon geometry is obtained separately",
+      "from GADM and is not duplicated in this workbook."
+    )
+  ),
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 11. Create workbook
+# ------------------------------------------------------------
+
+wb <- createWorkbook(
+  creator = "AR Kaye",
+  title = "Figure 5A source data",
+  subject = paste(
+    "Nigeria cattle-at-risk choropleths,",
+    "histograms and boxplots"
+  ),
+  category = "Research data"
+)
+
+addWorksheet(wb, "README")
+addWorksheet(wb, "LGA_values")
+addWorksheet(wb, "Distribution_values")
+addWorksheet(wb, "Survey_points")
+addWorksheet(wb, "Plot_settings")
+
+writeData(
+  wb,
+  sheet = "README",
+  x = figure5a_readme
+)
+
+writeData(
+  wb,
+  sheet = "LGA_values",
+  x = figure5a_lga_values
+)
+
+writeData(
+  wb,
+  sheet = "Distribution_values",
+  x = figure5a_distribution_values
+)
+
+writeData(
+  wb,
+  sheet = "Survey_points",
+  x = figure5a_survey_points
+)
+
+writeData(
+  wb,
+  sheet = "Plot_settings",
+  x = figure5a_plot_settings
+)
+
+# ------------------------------------------------------------
+# 12. Styles
+# ------------------------------------------------------------
+
+header_style <- createStyle(
+  fontColour = "#FFFFFF",
+  fgFill = "#1F4E78",
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  border = "bottom",
+  borderColour = "#FFFFFF"
+)
+
+decimal_style <- createStyle(
+  numFmt = "0.000000"
+)
+
+count_style <- createStyle(
+  numFmt = "#,##0.000"
+)
+
+integer_style <- createStyle(
+  numFmt = "0"
+)
+
+logical_style <- createStyle(
+  halign = "center"
+)
+
+wrap_style <- createStyle(
+  wrapText = TRUE,
+  valign = "top"
+)
+
+# ------------------------------------------------------------
+# 13. Format README
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  "README",
+  header_style,
+  rows = 1,
+  cols = 1:ncol(figure5a_readme),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  "README",
+  wrap_style,
+  rows = 2:(nrow(figure5a_readme) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  "README",
+  cols = 1,
+  widths = 28
+)
+
+setColWidths(
+  wb,
+  "README",
+  cols = 2,
+  widths = 85
+)
+
+freezePane(
+  wb,
+  "README",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# 14. Format LGA values
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  "LGA_values",
+  header_style,
+  rows = 1,
+  cols = 1:ncol(figure5a_lga_values),
+  gridExpand = TRUE
+)
+
+# Raw cattle counts
+raw_count_columns <- match(
+  c(
+    "Mean_cattle_at_risk",
+    "Lower_2.5_cattle_at_risk",
+    "Upper_97.5_cattle_at_risk",
+    "CI_width"
+  ),
+  names(figure5a_lga_values)
+)
+
+raw_count_columns <- raw_count_columns[
+  !is.na(raw_count_columns)
+]
+
+addStyle(
+  wb,
+  "LGA_values",
+  count_style,
+  rows = 2:(nrow(figure5a_lga_values) + 1),
+  cols = raw_count_columns,
+  gridExpand = TRUE
+)
+
+# Decimal and transformed columns
+decimal_columns <- match(
+  c(
+    "Mean_log10_cattle_at_risk",
+    "Lower_log10_cattle_at_risk",
+    "Upper_log10_cattle_at_risk",
+    "Recalculated_mean_log10",
+    "Recalculated_lower_log10",
+    "Recalculated_upper_log10",
+    "Risk_value",
+    "Tsetse_mean"
+  ),
+  names(figure5a_lga_values)
+)
+
+decimal_columns <- decimal_columns[
+  !is.na(decimal_columns)
+]
+
+addStyle(
+  wb,
+  "LGA_values",
+  decimal_style,
+  rows = 2:(nrow(figure5a_lga_values) + 1),
+  cols = decimal_columns,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  "LGA_values",
+  cols = 1:ncol(figure5a_lga_values),
+  widths = "auto"
+)
+
+freezePane(
+  wb,
+  "LGA_values",
+  firstRow = TRUE
+)
+
+addFilter(
+  wb,
+  "LGA_values",
+  row = 1,
+  cols = 1:ncol(figure5a_lga_values)
+)
+
+# ------------------------------------------------------------
+# 15. Format distribution values
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  "Distribution_values",
+  header_style,
+  rows = 1,
+  cols = 1:ncol(figure5a_distribution_values),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  "Distribution_values",
+  count_style,
+  rows = 2:(nrow(figure5a_distribution_values) + 1),
+  cols = 6,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  "Distribution_values",
+  cols = 1:ncol(figure5a_distribution_values),
+  widths = "auto"
+)
+
+freezePane(
+  wb,
+  "Distribution_values",
+  firstRow = TRUE
+)
+
+addFilter(
+  wb,
+  "Distribution_values",
+  row = 1,
+  cols = 1:ncol(figure5a_distribution_values)
+)
+
+# ------------------------------------------------------------
+# 16. Format survey points
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  "Survey_points",
+  header_style,
+  rows = 1,
+  cols = 1:ncol(figure5a_survey_points),
+  gridExpand = TRUE
+)
+
+if (nrow(figure5a_survey_points) > 0) {
+
+  addStyle(
+    wb,
+    "Survey_points",
+    decimal_style,
+    rows = 2:(nrow(figure5a_survey_points) + 1),
+    cols = 1:2,
+    gridExpand = TRUE
+  )
+
+  addStyle(
+    wb,
+    "Survey_points",
+    integer_style,
+    rows = 2:(nrow(figure5a_survey_points) + 1),
+    cols = 3,
+    gridExpand = TRUE
+  )
+}
+
+setColWidths(
+  wb,
+  "Survey_points",
+  cols = 1:ncol(figure5a_survey_points),
+  widths = "auto"
+)
+
+freezePane(
+  wb,
+  "Survey_points",
+  firstRow = TRUE
+)
+
+addFilter(
+  wb,
+  "Survey_points",
+  row = 1,
+  cols = 1:ncol(figure5a_survey_points)
+)
+
+# ------------------------------------------------------------
+# 17. Format plot settings
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  "Plot_settings",
+  header_style,
+  rows = 1,
+  cols = 1:ncol(figure5a_plot_settings),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  "Plot_settings",
+  wrap_style,
+  rows = 2:(nrow(figure5a_plot_settings) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  "Plot_settings",
+  cols = 1,
+  widths = 32
+)
+
+setColWidths(
+  wb,
+  "Plot_settings",
+  cols = 2,
+  widths = 85
+)
+
+freezePane(
+  wb,
+  "Plot_settings",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# 18. Save workbook
+# ------------------------------------------------------------
+
+figure5a_output_file <- file.path(
+  output_dir,
+  "Figure_5A_source_data.xlsx"
+)
+
+saveWorkbook(
+  wb,
+  file = figure5a_output_file,
+  overwrite = TRUE
+)
+
+message(
+  "Figure 5A source-data workbook saved to: ",
+  figure5a_output_file
+)
+
+message(
+  "Unique LGAs exported: ",
+  nrow(figure5a_lga_values)
+)
+
+message(
+  "Distribution values exported: ",
+  nrow(figure5a_distribution_values)
+)
+
+message(
+  "Survey points exported: ",
+  nrow(figure5a_survey_points)
+)

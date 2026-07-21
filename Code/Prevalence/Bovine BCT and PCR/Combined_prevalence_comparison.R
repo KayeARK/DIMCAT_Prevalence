@@ -314,3 +314,675 @@ if(!is.null(nigeria_ref_map) && !is.null(ethiopia_ref_map)) {
   ggsave("Code/Prevalence/Bovine BCT and PCR/Combined_prevalence_comparison.pdf", 
          plot = combined_ridge_plot, width = 12, height = 10, dpi = 300)
 }
+
+
+
+
+
+
+
+# ============================================================
+# FIGURE 4 SOURCE DATA
+#
+# Source data for:
+#   1. Administrative-area prevalence ridge distributions
+#   2. Nigeria state-level reference choropleth
+#   3. Ethiopia region-level reference choropleth
+#
+# Everything is written to one Excel workbook.
+# ============================================================
+
+library(openxlsx)
+library(dplyr)
+library(tidyr)
+library(forcats)
+
+output_dir <- "Code/Prevalence/Bovine BCT and PCR"
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# ------------------------------------------------------------
+# 1. Extract genuine model outputs only
+# ------------------------------------------------------------
+
+# Exclude the two artificial plotting rows:
+# Nigeria prevalence = -1
+# Ethiopia prevalence = 2
+#
+# Also exclude blank administrative-area names.
+
+figure4_prevalence_draws <- combined_data %>%
+  mutate(
+    Location = as.character(Location),
+    Country = as.character(Country),
+    Simulation = as.character(Simulation)
+  ) %>%
+  filter(
+    !is.na(Location),
+    Location != "",
+    !is.na(Prevalence),
+    Prevalence >= 0,
+    Prevalence <= 1
+  ) %>%
+  transmute(
+    Country = Country,
+    Administrative_area = Location,
+    Model_draw = Simulation,
+    Prevalence = Prevalence
+  ) %>%
+  arrange(
+    Country,
+    Administrative_area,
+    readr::parse_number(Model_draw)
+  )
+
+# ------------------------------------------------------------
+# 2. Verify that rows are uniquely identified
+# ------------------------------------------------------------
+
+duplicate_draws <- figure4_prevalence_draws %>%
+  count(
+    Country,
+    Administrative_area,
+    Model_draw,
+    name = "number_of_rows"
+  ) %>%
+  filter(number_of_rows > 1)
+
+if (nrow(duplicate_draws) > 0) {
+  stop(
+    paste(
+      "Duplicate country-area-model combinations were found.",
+      "Check the source projection files before exporting."
+    )
+  )
+}
+
+# ------------------------------------------------------------
+# 3. Mean prevalence values used for the choropleths
+# ------------------------------------------------------------
+
+figure4_map_values <- figure4_prevalence_draws %>%
+  group_by(
+    Country,
+    Administrative_area
+  ) %>%
+  summarise(
+    Mean_prevalence = mean(Prevalence, na.rm = TRUE),
+    Number_of_model_draws = sum(!is.na(Prevalence)),
+    .groups = "drop"
+  ) %>%
+  arrange(
+    Country,
+    Administrative_area
+  )
+
+# ------------------------------------------------------------
+# 4. Plot ordering used for the ridge distributions
+# ------------------------------------------------------------
+
+# Reconstruct the ordering directly from the genuine data.
+# Locations are ordered by mean prevalence within each country.
+
+figure4_plot_order <- figure4_map_values %>%
+  group_by(Country) %>%
+  arrange(
+    Mean_prevalence,
+    Administrative_area,
+    .by_group = TRUE
+  ) %>%
+  mutate(
+    Order_within_country = row_number()
+  ) %>%
+  ungroup() %>%
+  mutate(
+    Country_plot_block = case_when(
+      Country == "Ethiopia" ~ 1L,
+      Country == "Nigeria" ~ 2L,
+      TRUE ~ 3L
+    )
+  ) %>%
+  arrange(
+    Country_plot_block,
+    Order_within_country
+  ) %>%
+  mutate(
+    Overall_plot_order = row_number()
+  ) %>%
+  select(
+    Country,
+    Administrative_area,
+    Mean_prevalence,
+    Order_within_country,
+    Overall_plot_order
+  )
+
+# ------------------------------------------------------------
+# 5. Summary statistics for reconstruction checks
+# ------------------------------------------------------------
+
+summary_parameter <- function(x) {
+  tibble(
+    Mean = mean(x, na.rm = TRUE),
+    Standard_deviation = sd(x, na.rm = TRUE),
+    Minimum = min(x, na.rm = TRUE),
+    Lower_2.5_percentile = unname(quantile(x, 0.025, na.rm = TRUE)),
+    Median = median(x, na.rm = TRUE),
+    Upper_97.5_percentile = unname(quantile(x, 0.975, na.rm = TRUE)),
+    Maximum = max(x, na.rm = TRUE)
+  )
+}
+
+figure4_country_summary <- figure4_prevalence_draws %>%
+  group_by(Country) %>%
+  group_modify(
+    ~ summary_parameter(.x$Prevalence)
+  ) %>%
+  ungroup() %>%
+  left_join(
+    figure4_map_values %>%
+      group_by(Country) %>%
+      summarise(
+        Number_of_administrative_areas = n(),
+        Minimum_draws_per_area = min(Number_of_model_draws),
+        Maximum_draws_per_area = max(Number_of_model_draws),
+        .groups = "drop"
+      ),
+    by = "Country"
+  ) %>%
+  select(
+    Country,
+    Number_of_administrative_areas,
+    Minimum_draws_per_area,
+    Maximum_draws_per_area,
+    Mean,
+    Standard_deviation,
+    Minimum,
+    Lower_2.5_percentile,
+    Median,
+    Upper_97.5_percentile,
+    Maximum
+  )
+
+# ------------------------------------------------------------
+# 6. Check Excel row limit
+# ------------------------------------------------------------
+
+excel_max_data_rows <- 1048575L
+
+if (nrow(figure4_prevalence_draws) > excel_max_data_rows) {
+  stop(
+    paste0(
+      "The Prevalence_draws table contains ",
+      format(nrow(figure4_prevalence_draws), big.mark = ","),
+      " rows, which exceeds the Excel worksheet limit of ",
+      format(excel_max_data_rows, big.mark = ","),
+      " data rows."
+    )
+  )
+}
+
+# ------------------------------------------------------------
+# 7. README
+# ------------------------------------------------------------
+
+figure4_readme <- data.frame(
+  Item = c(
+    "Workbook description",
+    "Associated figure",
+    "Prevalence_draws sheet",
+    "Country",
+    "Administrative_area",
+    "Model_draw",
+    "Prevalence",
+    "Map_values sheet",
+    "Mean_prevalence",
+    "Number_of_model_draws",
+    "Plot_order sheet",
+    "Order_within_country",
+    "Overall_plot_order",
+    "Country_summary sheet",
+    "Administrative levels",
+    "Artificial plotting rows",
+    "Geographic boundaries",
+    "Units",
+    "Missing values"
+  ),
+  Description = c(
+    paste(
+      "Source data underlying the comparison of modelled AAT",
+      "prevalence distributions and administrative-area",
+      "reference maps for Nigeria and Ethiopia."
+    ),
+    "Figure 4.",
+    paste(
+      "One row per country, administrative area and retained",
+      "model draw. These prevalence values are the observations",
+      "used to estimate the ridge density for each area."
+    ),
+    "Country represented in the figure.",
+    paste(
+      "Administrative-area name used to label the ridge",
+      "distribution and join prevalence values to the map."
+    ),
+    paste(
+      "Identifier of the model realisation from which the",
+      "prevalence estimate was obtained."
+    ),
+    paste(
+      "Modelled prevalence estimate for the corresponding",
+      "administrative area and model draw."
+    ),
+    paste(
+      "One row per mapped administrative area. Contains the",
+      "mean prevalence value used to colour the reference maps."
+    ),
+    paste(
+      "Arithmetic mean of all retained prevalence model draws",
+      "for the administrative area."
+    ),
+    paste(
+      "Number of retained model prevalence estimates contributing",
+      "to the administrative-area mean."
+    ),
+    paste(
+      "Administrative-area ordering used to construct the vertical",
+      "axis of the ridge plot."
+    ),
+    paste(
+      "Rank of the administrative area by mean prevalence within",
+      "its country, from lowest to highest."
+    ),
+    paste(
+      "Position in the complete plot ordering, with Ethiopia",
+      "followed by Nigeria. The visual gap between countries is",
+      "a plotting feature and is not represented as data."
+    ),
+    paste(
+      "Country-level summary statistics supplied to facilitate",
+      "verification of the source-data reconstruction."
+    ),
+    paste(
+      "Nigeria is represented at GADM administrative level 1",
+      "(states). Ethiopia is represented at GADM administrative",
+      "level 1 (regions)."
+    ),
+    paste(
+      "Artificial prevalence values of -1 and 2 used in the",
+      "plotting script have been excluded because they are not",
+      "model outputs and fall outside the plotted prevalence range."
+    ),
+    paste(
+      "Administrative boundaries are obtained separately from",
+      "GADM using the geodata R package and are not duplicated",
+      "in this workbook."
+    ),
+    "All prevalence values are proportions ranging from 0 to 1.",
+    "Blank cells represent unavailable values."
+  ),
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 8. Create one Excel workbook
+# ------------------------------------------------------------
+
+wb <- createWorkbook(
+  creator = "AR Kaye",
+  title = "Figure 4 source data",
+  subject = paste(
+    "Nigeria and Ethiopia administrative-area prevalence",
+    "distributions and reference-map values"
+  ),
+  category = "Research data"
+)
+
+addWorksheet(wb, "README")
+addWorksheet(wb, "Prevalence_draws")
+addWorksheet(wb, "Map_values")
+addWorksheet(wb, "Plot_order")
+addWorksheet(wb, "Country_summary")
+
+writeData(
+  wb,
+  sheet = "README",
+  x = figure4_readme
+)
+
+writeData(
+  wb,
+  sheet = "Prevalence_draws",
+  x = figure4_prevalence_draws
+)
+
+writeData(
+  wb,
+  sheet = "Map_values",
+  x = figure4_map_values
+)
+
+writeData(
+  wb,
+  sheet = "Plot_order",
+  x = figure4_plot_order
+)
+
+writeData(
+  wb,
+  sheet = "Country_summary",
+  x = figure4_country_summary
+)
+
+# ------------------------------------------------------------
+# 9. Workbook styles
+# ------------------------------------------------------------
+
+header_style <- createStyle(
+  fontColour = "#FFFFFF",
+  fgFill = "#1F4E78",
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  border = "bottom",
+  borderColour = "#FFFFFF"
+)
+
+prevalence_style <- createStyle(
+  numFmt = "0.000000"
+)
+
+integer_style <- createStyle(
+  numFmt = "0"
+)
+
+wrap_style <- createStyle(
+  wrapText = TRUE,
+  valign = "top"
+)
+
+# ------------------------------------------------------------
+# 10. Format README
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  sheet = "README",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(figure4_readme),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "README",
+  style = wrap_style,
+  rows = 2:(nrow(figure4_readme) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  sheet = "README",
+  cols = 1,
+  widths = 28
+)
+
+setColWidths(
+  wb,
+  sheet = "README",
+  cols = 2,
+  widths = 85
+)
+
+setRowHeights(
+  wb,
+  sheet = "README",
+  rows = 2:(nrow(figure4_readme) + 1),
+  heights = 32
+)
+
+freezePane(
+  wb,
+  sheet = "README",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# 11. Format prevalence-draw sheet
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  sheet = "Prevalence_draws",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(figure4_prevalence_draws),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Prevalence_draws",
+  style = prevalence_style,
+  rows = 2:(nrow(figure4_prevalence_draws) + 1),
+  cols = 4,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  sheet = "Prevalence_draws",
+  cols = 1,
+  widths = 14
+)
+
+setColWidths(
+  wb,
+  sheet = "Prevalence_draws",
+  cols = 2,
+  widths = 30
+)
+
+setColWidths(
+  wb,
+  sheet = "Prevalence_draws",
+  cols = 3,
+  widths = 16
+)
+
+setColWidths(
+  wb,
+  sheet = "Prevalence_draws",
+  cols = 4,
+  widths = 16
+)
+
+freezePane(
+  wb,
+  sheet = "Prevalence_draws",
+  firstRow = TRUE
+)
+
+addFilter(
+  wb,
+  sheet = "Prevalence_draws",
+  row = 1,
+  cols = 1:ncol(figure4_prevalence_draws)
+)
+
+# ------------------------------------------------------------
+# 12. Format map-values sheet
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  sheet = "Map_values",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(figure4_map_values),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Map_values",
+  style = prevalence_style,
+  rows = 2:(nrow(figure4_map_values) + 1),
+  cols = 3,
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Map_values",
+  style = integer_style,
+  rows = 2:(nrow(figure4_map_values) + 1),
+  cols = 4,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  sheet = "Map_values",
+  cols = 1:ncol(figure4_map_values),
+  widths = "auto"
+)
+
+freezePane(
+  wb,
+  sheet = "Map_values",
+  firstRow = TRUE
+)
+
+addFilter(
+  wb,
+  sheet = "Map_values",
+  row = 1,
+  cols = 1:ncol(figure4_map_values)
+)
+
+# ------------------------------------------------------------
+# 13. Format plot-order sheet
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  sheet = "Plot_order",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(figure4_plot_order),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Plot_order",
+  style = prevalence_style,
+  rows = 2:(nrow(figure4_plot_order) + 1),
+  cols = 3,
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Plot_order",
+  style = integer_style,
+  rows = 2:(nrow(figure4_plot_order) + 1),
+  cols = 4:5,
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  sheet = "Plot_order",
+  cols = 1:ncol(figure4_plot_order),
+  widths = "auto"
+)
+
+freezePane(
+  wb,
+  sheet = "Plot_order",
+  firstRow = TRUE
+)
+
+addFilter(
+  wb,
+  sheet = "Plot_order",
+  row = 1,
+  cols = 1:ncol(figure4_plot_order)
+)
+
+# ------------------------------------------------------------
+# 14. Format summary sheet
+# ------------------------------------------------------------
+
+addStyle(
+  wb,
+  sheet = "Country_summary",
+  style = header_style,
+  rows = 1,
+  cols = 1:ncol(figure4_country_summary),
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Country_summary",
+  style = integer_style,
+  rows = 2:(nrow(figure4_country_summary) + 1),
+  cols = 2:4,
+  gridExpand = TRUE
+)
+
+addStyle(
+  wb,
+  sheet = "Country_summary",
+  style = prevalence_style,
+  rows = 2:(nrow(figure4_country_summary) + 1),
+  cols = 5:ncol(figure4_country_summary),
+  gridExpand = TRUE
+)
+
+setColWidths(
+  wb,
+  sheet = "Country_summary",
+  cols = 1:ncol(figure4_country_summary),
+  widths = "auto"
+)
+
+freezePane(
+  wb,
+  sheet = "Country_summary",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# 15. Save workbook
+# ------------------------------------------------------------
+
+figure4_output_file <- file.path(
+  output_dir,
+  "Figure_4_source_data.xlsx"
+)
+
+saveWorkbook(
+  wb,
+  file = figure4_output_file,
+  overwrite = TRUE
+)
+
+message(
+  "Figure 4 source-data workbook saved to: ",
+  figure4_output_file
+)
+
+message(
+  "Prevalence draws exported: ",
+  format(nrow(figure4_prevalence_draws), big.mark = ",")
+)
+
+message(
+  "Administrative areas exported: ",
+  format(nrow(figure4_map_values), big.mark = ",")
+)

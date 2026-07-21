@@ -527,3 +527,1309 @@ ggplot(dpm_var, aes(x = rel_between)) +
        x = "Relative importance of between-dataset variability",
        y = "Frequency")
 ggsave("Relative_uncertainty_between_histogram.png",width = 8, height = 6)
+
+
+
+
+
+
+
+# ============================================================
+# FIGURE 6A SOURCE DATA
+#
+# Exports the numerical data underlying the Nigerian
+# uncertainty maps and associated histogram/boxplot panels.
+#
+# Sheets:
+#   README
+#   LGA_values
+#   Distribution_values
+#   Grid_values
+#   Survey_points
+#   Plot_settings
+#   Summary_statistics
+#
+# ============================================================
+
+# openxlsx is used only for writing the workbook.
+# Explicit package namespaces are used to avoid function masking.
+
+# ------------------------------------------------------------
+# 1. Output location
+# ------------------------------------------------------------
+
+figure6a_output_dir <- paste0(
+  "Code/Prevalence/Bovine BCT and PCR/",
+  "Analysis_NGA"
+)
+
+dir.create(
+  figure6a_output_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+# ------------------------------------------------------------
+# 2. Unique Nigerian LGA lookup
+# ------------------------------------------------------------
+
+figure6a_lga_lookup <- nigeria_lgas_sf |>
+  sf::st_drop_geometry() |>
+  dplyr::transmute(
+    GID_2 = as.character(GID_2),
+    State = as.character(NAME_1),
+    LGA = as.character(NAME_2)
+  ) |>
+  dplyr::distinct(
+    GID_2,
+    .keep_all = TRUE
+  )
+
+stopifnot(
+  nrow(figure6a_lga_lookup) ==
+    dplyr::n_distinct(figure6a_lga_lookup$GID_2)
+)
+
+# ------------------------------------------------------------
+# 3. Standardise each LGA-level uncertainty object
+# ------------------------------------------------------------
+
+figure6a_rel_between <- lga_rel_between |>
+  dplyr::as_tibble() |>
+  dplyr::transmute(
+    GID_2 = as.character(GID_2),
+    State_from_result = as.character(NAME_1),
+    LGA_from_result = as.character(NAME_2),
+
+    Relative_diagnostic_uncertainty =
+      as.numeric(lga_value),
+
+    Median_grid_value =
+      as.numeric(median_value),
+
+    Minimum_grid_value =
+      as.numeric(min_value),
+
+    Maximum_grid_value =
+      as.numeric(max_value),
+
+    Number_of_grid_points =
+      as.integer(n_points),
+
+    Value_source = dplyr::if_else(
+      Number_of_grid_points > 0L,
+      "Direct grid-point aggregation",
+      "Five-nearest-point inverse-distance interpolation"
+    )
+  )
+
+figure6a_rel_within <- lga_rel_within |>
+  dplyr::as_tibble() |>
+  dplyr::transmute(
+    GID_2 = as.character(GID_2),
+
+    Relative_coverage_uncertainty =
+      as.numeric(lga_value),
+
+    Coverage_median_grid_value =
+      as.numeric(median_value),
+
+    Coverage_minimum_grid_value =
+      as.numeric(min_value),
+
+    Coverage_maximum_grid_value =
+      as.numeric(max_value),
+
+    Coverage_number_of_grid_points =
+      as.integer(n_points),
+
+    Coverage_value_source = dplyr::if_else(
+      Coverage_number_of_grid_points > 0L,
+      "Direct grid-point aggregation",
+      "Five-nearest-point inverse-distance interpolation"
+    )
+  )
+
+figure6a_between_var <- lga_between_var |>
+  dplyr::as_tibble() |>
+  dplyr::transmute(
+    GID_2 = as.character(GID_2),
+
+    Diagnostic_variance =
+      as.numeric(lga_value),
+
+    Diagnostic_variance_median =
+      as.numeric(median_value),
+
+    Diagnostic_variance_minimum =
+      as.numeric(min_value),
+
+    Diagnostic_variance_maximum =
+      as.numeric(max_value),
+
+    Variance_number_of_grid_points =
+      as.integer(n_points),
+
+    Variance_value_source = dplyr::if_else(
+      Variance_number_of_grid_points > 0L,
+      "Direct grid-point aggregation",
+      "Five-nearest-point inverse-distance interpolation"
+    )
+  )
+
+# Confirm one row per GID_2 in each result object
+stopifnot(
+  nrow(figure6a_rel_between) ==
+    dplyr::n_distinct(figure6a_rel_between$GID_2),
+
+  nrow(figure6a_rel_within) ==
+    dplyr::n_distinct(figure6a_rel_within$GID_2),
+
+  nrow(figure6a_between_var) ==
+    dplyr::n_distinct(figure6a_between_var$GID_2)
+)
+
+# ------------------------------------------------------------
+# 4. Combined LGA-level source-data table
+# ------------------------------------------------------------
+
+figure6a_lga_values <- figure6a_lga_lookup |>
+  dplyr::left_join(
+    figure6a_rel_between,
+    by = "GID_2",
+    relationship = "one-to-one"
+  ) |>
+  dplyr::left_join(
+    figure6a_rel_within,
+    by = "GID_2",
+    relationship = "one-to-one"
+  ) |>
+  dplyr::left_join(
+    figure6a_between_var,
+    by = "GID_2",
+    relationship = "one-to-one"
+  ) |>
+  dplyr::mutate(
+    # Numerical check: the two relative components should sum
+    # approximately to one.
+    Relative_components_sum =
+      Relative_diagnostic_uncertainty +
+      Relative_coverage_uncertainty,
+
+    Relative_components_difference_from_one =
+      Relative_components_sum - 1,
+
+    Diagnostic_value_interpolated =
+      Number_of_grid_points == 0L,
+
+    Coverage_value_interpolated =
+      Coverage_number_of_grid_points == 0L,
+
+    Variance_value_interpolated =
+      Variance_number_of_grid_points == 0L
+  ) |>
+  dplyr::arrange(
+    State,
+    LGA,
+    GID_2
+  )
+
+stopifnot(
+  nrow(figure6a_lga_values) ==
+    dplyr::n_distinct(figure6a_lga_values$GID_2)
+)
+
+# ------------------------------------------------------------
+# 5. Long-format values used by the choropleths,
+#    histograms and boxplots
+# ------------------------------------------------------------
+
+figure6a_distribution_values <- dplyr::bind_rows(
+
+  figure6a_lga_values |>
+    dplyr::transmute(
+      GID_2,
+      State,
+      LGA,
+
+      Uncertainty_measure =
+        "Relative diagnostic uncertainty",
+
+      Plot_object =
+        "lga_rel_between",
+
+      Source_column =
+        "lga_value",
+
+      Plotted_value =
+        Relative_diagnostic_uncertainty,
+
+      Number_of_grid_points =
+        Number_of_grid_points,
+
+      Interpolated =
+        Diagnostic_value_interpolated
+    ),
+
+  figure6a_lga_values |>
+    dplyr::transmute(
+      GID_2,
+      State,
+      LGA,
+
+      Uncertainty_measure =
+        "Relative coverage uncertainty",
+
+      Plot_object =
+        "lga_rel_within",
+
+      Source_column =
+        "lga_value",
+
+      Plotted_value =
+        Relative_coverage_uncertainty,
+
+      Number_of_grid_points =
+        Coverage_number_of_grid_points,
+
+      Interpolated =
+        Coverage_value_interpolated
+    ),
+
+  figure6a_lga_values |>
+    dplyr::transmute(
+      GID_2,
+      State,
+      LGA,
+
+      Uncertainty_measure =
+        "Diagnostic variance",
+
+      Plot_object =
+        "lga_between_var",
+
+      Source_column =
+        "lga_value",
+
+      Plotted_value =
+        Diagnostic_variance,
+
+      Number_of_grid_points =
+        Variance_number_of_grid_points,
+
+      Interpolated =
+        Variance_value_interpolated
+    )
+
+) |>
+  dplyr::filter(
+    !is.na(Plotted_value)
+  ) |>
+  dplyr::arrange(
+    Uncertainty_measure,
+    State,
+    LGA
+  )
+
+# ------------------------------------------------------------
+# 6. Prediction-grid uncertainty values
+# ------------------------------------------------------------
+
+# process_uncertainty_data() swaps Longitude and Latitude before
+# plotting. The coordinates below therefore represent the
+# corrected plotting coordinates, not merely the original
+# column labels in dpm_var.
+
+figure6a_grid_values <- dpm_var |>
+  dplyr::as_tibble() |>
+  dplyr::transmute(
+    Grid_cell_ID =
+      dplyr::row_number(),
+
+    Original_Latitude_column =
+      as.numeric(Latitude),
+
+    Original_Longitude_column =
+      as.numeric(Longitude),
+
+    Plot_longitude =
+      as.numeric(Latitude),
+
+    Plot_latitude =
+      as.numeric(Longitude),
+
+    Diagnostic_variance =
+      as.numeric(between_var),
+
+    Coverage_variance =
+      as.numeric(within_var),
+
+    Total_variance =
+      Diagnostic_variance +
+      Coverage_variance,
+
+    Relative_coverage_uncertainty =
+      as.numeric(rel_within),
+
+    Relative_diagnostic_uncertainty =
+      as.numeric(rel_between),
+
+    Relative_components_sum =
+      Relative_coverage_uncertainty +
+      Relative_diagnostic_uncertainty
+  )
+
+# ------------------------------------------------------------
+# 7. Survey-point overlays
+# ------------------------------------------------------------
+
+if (
+  exists("bovine_nigeria_sf") &&
+  !is.null(bovine_nigeria_sf) &&
+  nrow(bovine_nigeria_sf) > 0
+) {
+
+  figure6a_survey_points <- bovine_nigeria_sf |>
+    sf::st_drop_geometry() |>
+    dplyr::transmute(
+      Survey_point_ID =
+        dplyr::row_number(),
+
+      Longitude =
+        as.numeric(lon),
+
+      Latitude =
+        as.numeric(lat),
+
+      Sample_size =
+        as.integer(Number_of_animal_tested),
+
+      Number_infected =
+        as.integer(Number_of_infections),
+
+      Observed_prevalence =
+        as.numeric(Prevalence),
+
+      Test_type =
+        as.character(Test_Type)
+    ) |>
+    dplyr::arrange(
+      Test_type,
+      Longitude,
+      Latitude
+    )
+
+} else {
+
+  figure6a_survey_points <- data.frame(
+    Survey_point_ID = integer(0),
+    Longitude = numeric(0),
+    Latitude = numeric(0),
+    Sample_size = integer(0),
+    Number_infected = integer(0),
+    Observed_prevalence = numeric(0),
+    Test_type = character(0)
+  )
+}
+
+# ------------------------------------------------------------
+# 8. Summary statistics
+# ------------------------------------------------------------
+
+make_figure6a_summary <- function(
+    values,
+    measure_name
+) {
+
+  values <- values[
+    is.finite(values)
+  ]
+
+  data.frame(
+    Uncertainty_measure =
+      measure_name,
+
+    Number_of_LGAs =
+      length(values),
+
+    Mean =
+      mean(values, na.rm = TRUE),
+
+    Standard_deviation =
+      stats::sd(values, na.rm = TRUE),
+
+    Minimum =
+      min(values, na.rm = TRUE),
+
+    Lower_2.5_percentile =
+      as.numeric(
+        stats::quantile(
+          values,
+          probs = 0.025,
+          na.rm = TRUE
+        )
+      ),
+
+    Median =
+      stats::median(
+        values,
+        na.rm = TRUE
+      ),
+
+    Upper_97.5_percentile =
+      as.numeric(
+        stats::quantile(
+          values,
+          probs = 0.975,
+          na.rm = TRUE
+        )
+      ),
+
+    Maximum =
+      max(values, na.rm = TRUE),
+
+    stringsAsFactors = FALSE
+  )
+}
+
+figure6a_summary_statistics <- dplyr::bind_rows(
+
+  make_figure6a_summary(
+    figure6a_lga_values$
+      Relative_diagnostic_uncertainty,
+    "Relative diagnostic uncertainty"
+  ),
+
+  make_figure6a_summary(
+    figure6a_lga_values$
+      Relative_coverage_uncertainty,
+    "Relative coverage uncertainty"
+  ),
+
+  make_figure6a_summary(
+    figure6a_lga_values$
+      Diagnostic_variance,
+    "Diagnostic variance"
+  )
+)
+
+# Add interpolation counts to the summary table
+figure6a_interpolation_summary <- data.frame(
+  Uncertainty_measure = c(
+    "Relative diagnostic uncertainty",
+    "Relative coverage uncertainty",
+    "Diagnostic variance"
+  ),
+
+  Directly_aggregated_LGAs = c(
+    sum(
+      !figure6a_lga_values$
+        Diagnostic_value_interpolated,
+      na.rm = TRUE
+    ),
+
+    sum(
+      !figure6a_lga_values$
+        Coverage_value_interpolated,
+      na.rm = TRUE
+    ),
+
+    sum(
+      !figure6a_lga_values$
+        Variance_value_interpolated,
+      na.rm = TRUE
+    )
+  ),
+
+  Interpolated_LGAs = c(
+    sum(
+      figure6a_lga_values$
+        Diagnostic_value_interpolated,
+      na.rm = TRUE
+    ),
+
+    sum(
+      figure6a_lga_values$
+        Coverage_value_interpolated,
+      na.rm = TRUE
+    ),
+
+    sum(
+      figure6a_lga_values$
+        Variance_value_interpolated,
+      na.rm = TRUE
+    )
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+figure6a_summary_statistics <-
+  figure6a_summary_statistics |>
+  dplyr::left_join(
+    figure6a_interpolation_summary,
+    by = "Uncertainty_measure",
+    relationship = "one-to-one"
+  )
+
+# ------------------------------------------------------------
+# 9. Plot settings
+# ------------------------------------------------------------
+
+figure6a_plot_settings <- data.frame(
+  Setting = c(
+    "Administrative level",
+    "Administrative identifier",
+    "Prediction datasets",
+    "Prediction grid cells",
+    "Analysis scale",
+    "Diagnostic variance",
+    "Coverage variance",
+    "Total variance",
+    "Relative diagnostic uncertainty",
+    "Relative coverage uncertainty",
+    "LGA aggregation",
+    "Missing-LGA interpolation",
+    "Interpolation neighbours",
+    "Interpolation weighting",
+    "Relative-map colour limits",
+    "Diagnostic-variance colour limits",
+    "Colour palette",
+    "Histogram bin width",
+    "Histogram boundary",
+    "Histogram closure",
+    "Histogram x-axis limits",
+    "Histogram x-axis breaks",
+    "Boxplot width",
+    "Survey-point size range",
+    "Survey-point size breaks",
+    "Survey-point shape",
+    "Coordinate reference system"
+  ),
+
+  Value = c(
+    "GADM level 2 Nigerian Local Government Areas",
+    "GID_2",
+    as.character(n_datasets),
+    as.character(n_units),
+    "Logit prevalence scale",
+    "Variance across the 1,000 corrected-prevalence model datasets",
+    paste(
+      "Mean squared within-dataset standard deviation,",
+      "estimated from the 2.5th and 97.5th percentiles"
+    ),
+    "Diagnostic variance plus coverage variance",
+    "Diagnostic variance divided by total variance",
+    "Coverage variance divided by total variance",
+    "Arithmetic mean of prediction-grid values within each LGA",
+    paste(
+      "LGAs with no prediction-grid points were assigned",
+      "an inverse-distance-weighted estimate"
+    ),
+    "Five nearest prediction-grid points",
+    "Inverse distance with 1e-10 added to each distance",
+    "0 to 1",
+    paste0(
+      format(
+        min(
+          lga_between_var$lga_value,
+          na.rm = TRUE
+        ),
+        scientific = TRUE,
+        digits = 8
+      ),
+      " to ",
+      format(
+        max(
+          lga_between_var$lga_value,
+          na.rm = TRUE
+        ),
+        scientific = TRUE,
+        digits = 8
+      )
+    ),
+    "viridis magma",
+    "0.04",
+    "0",
+    "Left-closed",
+    "0 to 1",
+    "0, 0.2, 0.4, 0.6, 0.8 and 1",
+    "0.8",
+    "1 to 10",
+    "10, 50, 100 and 200",
+    "HCT/BCT = 21; PCR = 22",
+    "WGS84, EPSG:4326"
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 10. README
+# ------------------------------------------------------------
+
+figure6a_readme <- data.frame(
+  Item = c(
+    "Workbook description",
+    "Associated figure",
+    "LGA_values sheet",
+    "Distribution_values sheet",
+    "Grid_values sheet",
+    "Survey_points sheet",
+    "Plot_settings sheet",
+    "Summary_statistics sheet",
+    "Relative diagnostic uncertainty",
+    "Relative coverage uncertainty",
+    "Diagnostic variance",
+    "Coverage variance",
+    "Value_source",
+    "Interpolated values",
+    "Grid coordinate columns",
+    "Administrative geometry",
+    "Units"
+  ),
+
+  Description = c(
+    paste(
+      "Source data underlying Figure 6A, including",
+      "Nigerian LGA-level uncertainty measures,",
+      "prediction-grid uncertainty values, distribution",
+      "plot inputs and bovine survey-point overlays."
+    ),
+
+    "Figure 6A.",
+
+    paste(
+      "One row per unique Nigerian GADM level-2 LGA.",
+      "Contains all three mapped uncertainty measures,",
+      "within-LGA summaries and interpolation indicators."
+    ),
+
+    paste(
+      "Long-format LGA values used directly by the",
+      "choropleths, histograms and boxplots."
+    ),
+
+    paste(
+      "Prediction-grid uncertainty decomposition before",
+      "aggregation to LGAs."
+    ),
+
+    paste(
+      "Survey locations plotted over each uncertainty",
+      "choropleth."
+    ),
+
+    paste(
+      "Transformations, interpolation rules, scale limits",
+      "and plotting parameters."
+    ),
+
+    paste(
+      "Descriptive summaries and counts of directly",
+      "aggregated and interpolated LGAs."
+    ),
+
+    paste(
+      "Proportion of total logit-scale variance attributed",
+      "to variation across corrected-prevalence datasets."
+    ),
+
+    paste(
+      "Proportion of total logit-scale variance attributed",
+      "to uncertainty within each spatial model projection."
+    ),
+
+    paste(
+      "Variance across corrected-prevalence model datasets",
+      "on the logit prevalence scale."
+    ),
+
+    paste(
+      "Mean within-dataset variance estimated using the",
+      "2.5th and 97.5th percentiles."
+    ),
+
+    paste(
+      "Indicates whether an LGA value was calculated from",
+      "grid points lying directly inside the LGA or by",
+      "inverse-distance interpolation."
+    ),
+
+    paste(
+      "An interpolated LGA has Number_of_grid_points equal",
+      "to zero and was assigned a value using the five",
+      "nearest prediction-grid points."
+    ),
+
+    paste(
+      "The input prediction files stored longitude and",
+      "latitude in reversed columns. Plot_longitude and",
+      "Plot_latitude are the corrected coordinates used",
+      "by the plotting functions."
+    ),
+
+    paste(
+      "Administrative polygon geometry is obtained",
+      "separately from GADM and is not embedded in this",
+      "workbook."
+    ),
+
+    paste(
+      "Relative uncertainty values are proportions;",
+      "variance values are on the squared logit-prevalence",
+      "scale."
+    )
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 11. Create workbook
+# ------------------------------------------------------------
+
+figure6a_wb <- openxlsx::createWorkbook(
+  creator = "AR Kaye",
+  title = "Figure 6A source data",
+  subject = paste(
+    "Nigeria uncertainty decomposition maps,",
+    "histograms and boxplots"
+  ),
+  category = "Research data"
+)
+
+openxlsx::addWorksheet(
+  figure6a_wb,
+  "README"
+)
+
+openxlsx::addWorksheet(
+  figure6a_wb,
+  "LGA_values"
+)
+
+openxlsx::addWorksheet(
+  figure6a_wb,
+  "Distribution_values"
+)
+
+openxlsx::addWorksheet(
+  figure6a_wb,
+  "Grid_values"
+)
+
+openxlsx::addWorksheet(
+  figure6a_wb,
+  "Survey_points"
+)
+
+openxlsx::addWorksheet(
+  figure6a_wb,
+  "Plot_settings"
+)
+
+openxlsx::addWorksheet(
+  figure6a_wb,
+  "Summary_statistics"
+)
+
+openxlsx::writeData(
+  figure6a_wb,
+  "README",
+  figure6a_readme
+)
+
+openxlsx::writeData(
+  figure6a_wb,
+  "LGA_values",
+  figure6a_lga_values
+)
+
+openxlsx::writeData(
+  figure6a_wb,
+  "Distribution_values",
+  figure6a_distribution_values
+)
+
+openxlsx::writeData(
+  figure6a_wb,
+  "Grid_values",
+  figure6a_grid_values
+)
+
+openxlsx::writeData(
+  figure6a_wb,
+  "Survey_points",
+  figure6a_survey_points
+)
+
+openxlsx::writeData(
+  figure6a_wb,
+  "Plot_settings",
+  figure6a_plot_settings
+)
+
+openxlsx::writeData(
+  figure6a_wb,
+  "Summary_statistics",
+  figure6a_summary_statistics
+)
+
+# ------------------------------------------------------------
+# 12. Workbook styles
+# ------------------------------------------------------------
+
+figure6a_header_style <- openxlsx::createStyle(
+  fontColour = "#FFFFFF",
+  fgFill = "#1F4E78",
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  border = "bottom",
+  borderColour = "#FFFFFF"
+)
+
+figure6a_decimal_style <- openxlsx::createStyle(
+  numFmt = "0.000000"
+)
+
+figure6a_variance_style <- openxlsx::createStyle(
+  numFmt = "0.0000000000"
+)
+
+figure6a_integer_style <- openxlsx::createStyle(
+  numFmt = "0"
+)
+
+figure6a_percentage_style <- openxlsx::createStyle(
+  numFmt = "0.000%"
+)
+
+figure6a_wrap_style <- openxlsx::createStyle(
+  wrapText = TRUE,
+  valign = "top"
+)
+
+# ------------------------------------------------------------
+# 13. General formatting helper
+# ------------------------------------------------------------
+
+figure6a_format_data_sheet <- function(
+    workbook,
+    sheet_name,
+    data_object
+) {
+
+  if (ncol(data_object) < 1) {
+    return(invisible(NULL))
+  }
+
+  openxlsx::addStyle(
+    workbook,
+    sheet = sheet_name,
+    style = figure6a_header_style,
+    rows = 1,
+    cols = seq_len(ncol(data_object)),
+    gridExpand = TRUE
+  )
+
+  openxlsx::setColWidths(
+    workbook,
+    sheet = sheet_name,
+    cols = seq_len(ncol(data_object)),
+    widths = "auto"
+  )
+
+  openxlsx::freezePane(
+    workbook,
+    sheet = sheet_name,
+    firstRow = TRUE
+  )
+
+  openxlsx::addFilter(
+    workbook,
+    sheet = sheet_name,
+    row = 1,
+    cols = seq_len(ncol(data_object))
+  )
+}
+
+figure6a_format_data_sheet(
+  figure6a_wb,
+  "LGA_values",
+  figure6a_lga_values
+)
+
+figure6a_format_data_sheet(
+  figure6a_wb,
+  "Distribution_values",
+  figure6a_distribution_values
+)
+
+figure6a_format_data_sheet(
+  figure6a_wb,
+  "Grid_values",
+  figure6a_grid_values
+)
+
+figure6a_format_data_sheet(
+  figure6a_wb,
+  "Survey_points",
+  figure6a_survey_points
+)
+
+figure6a_format_data_sheet(
+  figure6a_wb,
+  "Summary_statistics",
+  figure6a_summary_statistics
+)
+
+# ------------------------------------------------------------
+# 14. README formatting
+# ------------------------------------------------------------
+
+openxlsx::addStyle(
+  figure6a_wb,
+  "README",
+  figure6a_header_style,
+  rows = 1,
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::addStyle(
+  figure6a_wb,
+  "README",
+  figure6a_wrap_style,
+  rows = 2:(nrow(figure6a_readme) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::setColWidths(
+  figure6a_wb,
+  "README",
+  cols = 1,
+  widths = 32
+)
+
+openxlsx::setColWidths(
+  figure6a_wb,
+  "README",
+  cols = 2,
+  widths = 90
+)
+
+openxlsx::freezePane(
+  figure6a_wb,
+  "README",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# 15. Plot-settings formatting
+# ------------------------------------------------------------
+
+openxlsx::addStyle(
+  figure6a_wb,
+  "Plot_settings",
+  figure6a_header_style,
+  rows = 1,
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::addStyle(
+  figure6a_wb,
+  "Plot_settings",
+  figure6a_wrap_style,
+  rows = 2:(nrow(figure6a_plot_settings) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::setColWidths(
+  figure6a_wb,
+  "Plot_settings",
+  cols = 1,
+  widths = 42
+)
+
+openxlsx::setColWidths(
+  figure6a_wb,
+  "Plot_settings",
+  cols = 2,
+  widths = 90
+)
+
+openxlsx::freezePane(
+  figure6a_wb,
+  "Plot_settings",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# 16. Numeric formatting: LGA_values
+# ------------------------------------------------------------
+
+figure6a_lga_relative_columns <- match(
+  c(
+    "Relative_diagnostic_uncertainty",
+    "Relative_coverage_uncertainty",
+    "Relative_components_sum",
+    "Relative_components_difference_from_one"
+  ),
+  names(figure6a_lga_values)
+)
+
+figure6a_lga_relative_columns <-
+  figure6a_lga_relative_columns[
+    !is.na(figure6a_lga_relative_columns)
+  ]
+
+if (
+  nrow(figure6a_lga_values) > 0 &&
+  length(figure6a_lga_relative_columns) > 0
+) {
+
+  openxlsx::addStyle(
+    figure6a_wb,
+    "LGA_values",
+    figure6a_percentage_style,
+    rows = 2:(nrow(figure6a_lga_values) + 1),
+    cols = figure6a_lga_relative_columns,
+    gridExpand = TRUE
+  )
+}
+
+figure6a_lga_variance_columns <- match(
+  c(
+    "Diagnostic_variance",
+    "Diagnostic_variance_median",
+    "Diagnostic_variance_minimum",
+    "Diagnostic_variance_maximum"
+  ),
+  names(figure6a_lga_values)
+)
+
+figure6a_lga_variance_columns <-
+  figure6a_lga_variance_columns[
+    !is.na(figure6a_lga_variance_columns)
+  ]
+
+if (
+  nrow(figure6a_lga_values) > 0 &&
+  length(figure6a_lga_variance_columns) > 0
+) {
+
+  openxlsx::addStyle(
+    figure6a_wb,
+    "LGA_values",
+    figure6a_variance_style,
+    rows = 2:(nrow(figure6a_lga_values) + 1),
+    cols = figure6a_lga_variance_columns,
+    gridExpand = TRUE
+  )
+}
+
+figure6a_lga_integer_columns <- match(
+  c(
+    "Number_of_grid_points",
+    "Coverage_number_of_grid_points",
+    "Variance_number_of_grid_points"
+  ),
+  names(figure6a_lga_values)
+)
+
+figure6a_lga_integer_columns <-
+  figure6a_lga_integer_columns[
+    !is.na(figure6a_lga_integer_columns)
+  ]
+
+if (
+  nrow(figure6a_lga_values) > 0 &&
+  length(figure6a_lga_integer_columns) > 0
+) {
+
+  openxlsx::addStyle(
+    figure6a_wb,
+    "LGA_values",
+    figure6a_integer_style,
+    rows = 2:(nrow(figure6a_lga_values) + 1),
+    cols = figure6a_lga_integer_columns,
+    gridExpand = TRUE
+  )
+}
+
+# ------------------------------------------------------------
+# 17. Numeric formatting: Distribution_values
+# ------------------------------------------------------------
+
+figure6a_distribution_value_column <- match(
+  "Plotted_value",
+  names(figure6a_distribution_values)
+)
+
+if (
+  nrow(figure6a_distribution_values) > 0 &&
+  !is.na(figure6a_distribution_value_column)
+) {
+
+  openxlsx::addStyle(
+    figure6a_wb,
+    "Distribution_values",
+    figure6a_decimal_style,
+    rows = 2:(nrow(figure6a_distribution_values) + 1),
+    cols = figure6a_distribution_value_column,
+    gridExpand = TRUE
+  )
+}
+
+# ------------------------------------------------------------
+# 18. Numeric formatting: Grid_values
+# ------------------------------------------------------------
+
+figure6a_grid_coordinate_columns <- match(
+  c(
+    "Original_Latitude_column",
+    "Original_Longitude_column",
+    "Plot_longitude",
+    "Plot_latitude"
+  ),
+  names(figure6a_grid_values)
+)
+
+figure6a_grid_coordinate_columns <-
+  figure6a_grid_coordinate_columns[
+    !is.na(figure6a_grid_coordinate_columns)
+  ]
+
+openxlsx::addStyle(
+  figure6a_wb,
+  "Grid_values",
+  figure6a_decimal_style,
+  rows = 2:(nrow(figure6a_grid_values) + 1),
+  cols = figure6a_grid_coordinate_columns,
+  gridExpand = TRUE
+)
+
+figure6a_grid_variance_columns <- match(
+  c(
+    "Diagnostic_variance",
+    "Coverage_variance",
+    "Total_variance"
+  ),
+  names(figure6a_grid_values)
+)
+
+figure6a_grid_variance_columns <-
+  figure6a_grid_variance_columns[
+    !is.na(figure6a_grid_variance_columns)
+  ]
+
+openxlsx::addStyle(
+  figure6a_wb,
+  "Grid_values",
+  figure6a_variance_style,
+  rows = 2:(nrow(figure6a_grid_values) + 1),
+  cols = figure6a_grid_variance_columns,
+  gridExpand = TRUE
+)
+
+figure6a_grid_relative_columns <- match(
+  c(
+    "Relative_coverage_uncertainty",
+    "Relative_diagnostic_uncertainty",
+    "Relative_components_sum"
+  ),
+  names(figure6a_grid_values)
+)
+
+figure6a_grid_relative_columns <-
+  figure6a_grid_relative_columns[
+    !is.na(figure6a_grid_relative_columns)
+  ]
+
+openxlsx::addStyle(
+  figure6a_wb,
+  "Grid_values",
+  figure6a_percentage_style,
+  rows = 2:(nrow(figure6a_grid_values) + 1),
+  cols = figure6a_grid_relative_columns,
+  gridExpand = TRUE
+)
+
+# ------------------------------------------------------------
+# 19. Numeric formatting: Survey_points
+# ------------------------------------------------------------
+
+if (nrow(figure6a_survey_points) > 0) {
+
+  openxlsx::addStyle(
+    figure6a_wb,
+    "Survey_points",
+    figure6a_decimal_style,
+    rows = 2:(nrow(figure6a_survey_points) + 1),
+    cols = c(2, 3),
+    gridExpand = TRUE
+  )
+
+  openxlsx::addStyle(
+    figure6a_wb,
+    "Survey_points",
+    figure6a_integer_style,
+    rows = 2:(nrow(figure6a_survey_points) + 1),
+    cols = c(1, 4, 5),
+    gridExpand = TRUE
+  )
+
+  openxlsx::addStyle(
+    figure6a_wb,
+    "Survey_points",
+    figure6a_percentage_style,
+    rows = 2:(nrow(figure6a_survey_points) + 1),
+    cols = 6,
+    gridExpand = TRUE
+  )
+}
+
+# ------------------------------------------------------------
+# 20. Save workbook
+# ------------------------------------------------------------
+
+figure6a_output_file <- file.path(
+  figure6a_output_dir,
+  "Figure_6A_source_data.xlsx"
+)
+
+openxlsx::saveWorkbook(
+  figure6a_wb,
+  file = figure6a_output_file,
+  overwrite = TRUE
+)
+
+message(
+  "Figure 6A source-data workbook saved to: ",
+  figure6a_output_file
+)
+
+message(
+  "LGA rows exported: ",
+  nrow(figure6a_lga_values)
+)
+
+message(
+  "Distribution values exported: ",
+  nrow(figure6a_distribution_values)
+)
+
+message(
+  "Prediction-grid rows exported: ",
+  nrow(figure6a_grid_values)
+)
+
+message(
+  "Survey points exported: ",
+  nrow(figure6a_survey_points)
+)

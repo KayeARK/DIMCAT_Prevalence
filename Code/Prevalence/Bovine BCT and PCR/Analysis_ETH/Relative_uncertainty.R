@@ -560,3 +560,1399 @@ ggplot(dpm_var, aes(x = rel_between)) +
        x = "Relative importance of between-dataset variability",
        y = "Frequency")
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_ETH/Relative_uncertainty_between_histogram.png",width = 8, height = 6)
+
+
+
+
+
+
+
+
+# ============================================================
+# FIGURE 6B SOURCE DATA
+#
+# Ethiopian uncertainty decomposition maps and associated
+# histogram/boxplot panels.
+#
+# Sheets:
+#   README
+#   District_values
+#   Distribution_values
+#   Grid_values
+#   Survey_points
+#   Plot_settings
+#   Summary_statistics
+#
+# ============================================================
+
+# Explicit namespaces are used because raster may mask
+# functions such as select().
+
+# ------------------------------------------------------------
+# 1. Output location
+# ------------------------------------------------------------
+
+figure6b_output_dir <- paste0(
+  "Code/Prevalence/Bovine BCT and PCR/",
+  "Analysis_ETH"
+)
+
+dir.create(
+  figure6b_output_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+# ------------------------------------------------------------
+# 2. Unique Ethiopian level-3 polygon lookup
+# ------------------------------------------------------------
+
+figure6b_district_lookup <- ethiopia_zones_sf |>
+  sf::st_drop_geometry() |>
+  dplyr::transmute(
+    GID_3 = as.character(GID_3),
+    Region = as.character(NAME_1),
+    Zone = as.character(NAME_2),
+    District = as.character(NAME_3)
+  ) |>
+  dplyr::distinct(
+    GID_3,
+    .keep_all = TRUE
+  )
+
+stopifnot(
+  nrow(figure6b_district_lookup) ==
+    dplyr::n_distinct(
+      figure6b_district_lookup$GID_3
+    )
+)
+
+# ------------------------------------------------------------
+# 3. Standardise uncertainty-result objects
+# ------------------------------------------------------------
+
+figure6b_rel_between <- zone_rel_between |>
+  dplyr::as_tibble() |>
+  dplyr::transmute(
+    GID_3 = as.character(GID_3),
+
+    Zone_from_result =
+      as.character(NAME_2),
+
+    Relative_diagnostic_uncertainty =
+      as.numeric(zone_value),
+
+    Median_grid_value =
+      as.numeric(median_value),
+
+    Minimum_grid_value =
+      as.numeric(min_value),
+
+    Maximum_grid_value =
+      as.numeric(max_value),
+
+    Number_of_grid_points =
+      as.integer(n_points),
+
+    Value_source = dplyr::if_else(
+      Number_of_grid_points > 0L,
+      "Direct grid-point aggregation",
+      paste(
+        "Five-nearest-point",
+        "inverse-distance interpolation"
+      )
+    )
+  )
+
+figure6b_rel_within <- zone_rel_within |>
+  dplyr::as_tibble() |>
+  dplyr::transmute(
+    GID_3 = as.character(GID_3),
+
+    Relative_coverage_uncertainty =
+      as.numeric(zone_value),
+
+    Coverage_median_grid_value =
+      as.numeric(median_value),
+
+    Coverage_minimum_grid_value =
+      as.numeric(min_value),
+
+    Coverage_maximum_grid_value =
+      as.numeric(max_value),
+
+    Coverage_number_of_grid_points =
+      as.integer(n_points),
+
+    Coverage_value_source = dplyr::if_else(
+      Coverage_number_of_grid_points > 0L,
+      "Direct grid-point aggregation",
+      paste(
+        "Five-nearest-point",
+        "inverse-distance interpolation"
+      )
+    )
+  )
+
+figure6b_between_var <- zone_between_var |>
+  dplyr::as_tibble() |>
+  dplyr::transmute(
+    GID_3 = as.character(GID_3),
+
+    Diagnostic_variance =
+      as.numeric(zone_value),
+
+    Diagnostic_variance_median =
+      as.numeric(median_value),
+
+    Diagnostic_variance_minimum =
+      as.numeric(min_value),
+
+    Diagnostic_variance_maximum =
+      as.numeric(max_value),
+
+    Variance_number_of_grid_points =
+      as.integer(n_points),
+
+    Variance_value_source = dplyr::if_else(
+      Variance_number_of_grid_points > 0L,
+      "Direct grid-point aggregation",
+      paste(
+        "Five-nearest-point",
+        "inverse-distance interpolation"
+      )
+    )
+  )
+
+stopifnot(
+  nrow(figure6b_rel_between) ==
+    dplyr::n_distinct(
+      figure6b_rel_between$GID_3
+    ),
+
+  nrow(figure6b_rel_within) ==
+    dplyr::n_distinct(
+      figure6b_rel_within$GID_3
+    ),
+
+  nrow(figure6b_between_var) ==
+    dplyr::n_distinct(
+      figure6b_between_var$GID_3
+    )
+)
+
+# ------------------------------------------------------------
+# 4. Combined district-level table
+# ------------------------------------------------------------
+
+figure6b_district_values <- figure6b_district_lookup |>
+  dplyr::left_join(
+    figure6b_rel_between,
+    by = "GID_3",
+    relationship = "one-to-one"
+  ) |>
+  dplyr::left_join(
+    figure6b_rel_within,
+    by = "GID_3",
+    relationship = "one-to-one"
+  ) |>
+  dplyr::left_join(
+    figure6b_between_var,
+    by = "GID_3",
+    relationship = "one-to-one"
+  ) |>
+  dplyr::mutate(
+    Relative_components_sum =
+      Relative_diagnostic_uncertainty +
+      Relative_coverage_uncertainty,
+
+    Relative_components_difference_from_one =
+      Relative_components_sum - 1,
+
+    Diagnostic_value_interpolated =
+      Number_of_grid_points == 0L,
+
+    Coverage_value_interpolated =
+      Coverage_number_of_grid_points == 0L,
+
+    Variance_value_interpolated =
+      Variance_number_of_grid_points == 0L
+  ) |>
+  dplyr::arrange(
+    Region,
+    Zone,
+    District,
+    GID_3
+  )
+
+stopifnot(
+  nrow(figure6b_district_values) ==
+    dplyr::n_distinct(
+      figure6b_district_values$GID_3
+    )
+)
+
+# ------------------------------------------------------------
+# 5. Long-format plotted district values
+# ------------------------------------------------------------
+
+figure6b_distribution_values <- dplyr::bind_rows(
+
+  figure6b_district_values |>
+    dplyr::transmute(
+      GID_3,
+      Region,
+      Zone,
+      District,
+
+      Uncertainty_measure =
+        "Relative diagnostic uncertainty",
+
+      Plot_object =
+        "zone_rel_between",
+
+      Source_column =
+        "zone_value",
+
+      Plotted_value =
+        Relative_diagnostic_uncertainty,
+
+      Number_of_grid_points =
+        Number_of_grid_points,
+
+      Interpolated =
+        Diagnostic_value_interpolated
+    ),
+
+  figure6b_district_values |>
+    dplyr::transmute(
+      GID_3,
+      Region,
+      Zone,
+      District,
+
+      Uncertainty_measure =
+        "Relative coverage uncertainty",
+
+      Plot_object =
+        "zone_rel_within",
+
+      Source_column =
+        "zone_value",
+
+      Plotted_value =
+        Relative_coverage_uncertainty,
+
+      Number_of_grid_points =
+        Coverage_number_of_grid_points,
+
+      Interpolated =
+        Coverage_value_interpolated
+    ),
+
+  figure6b_district_values |>
+    dplyr::transmute(
+      GID_3,
+      Region,
+      Zone,
+      District,
+
+      Uncertainty_measure =
+        "Diagnostic variance",
+
+      Plot_object =
+        "zone_between_var",
+
+      Source_column =
+        "zone_value",
+
+      Plotted_value =
+        Diagnostic_variance,
+
+      Number_of_grid_points =
+        Variance_number_of_grid_points,
+
+      Interpolated =
+        Variance_value_interpolated
+    )
+
+) |>
+  dplyr::filter(
+    !is.na(Plotted_value)
+  ) |>
+  dplyr::arrange(
+    Uncertainty_measure,
+    Region,
+    Zone,
+    District
+  )
+
+# ------------------------------------------------------------
+# 6. Prediction-grid uncertainty values
+# ------------------------------------------------------------
+
+# process_uncertainty_data() swaps the original Longitude and
+# Latitude columns before creating the plotting coordinates.
+# Both original and corrected coordinate interpretations are
+# retained here.
+
+figure6b_grid_values <- dpm_var |>
+  dplyr::as_tibble() |>
+  dplyr::transmute(
+    Grid_cell_ID =
+      dplyr::row_number(),
+
+    Original_Latitude_column =
+      as.numeric(Latitude),
+
+    Original_Longitude_column =
+      as.numeric(Longitude),
+
+    Plot_longitude =
+      as.numeric(Latitude),
+
+    Plot_latitude =
+      as.numeric(Longitude),
+
+    Diagnostic_variance =
+      as.numeric(between_var),
+
+    Coverage_variance =
+      as.numeric(within_var),
+
+    Total_variance =
+      Diagnostic_variance +
+      Coverage_variance,
+
+    Relative_coverage_uncertainty =
+      as.numeric(rel_within),
+
+    Relative_diagnostic_uncertainty =
+      as.numeric(rel_between),
+
+    Relative_components_sum =
+      Relative_coverage_uncertainty +
+      Relative_diagnostic_uncertainty
+  )
+
+# ------------------------------------------------------------
+# 7. Survey-point overlays
+# ------------------------------------------------------------
+
+if (
+  exists("bovine_ethiopia_sf") &&
+  !is.null(bovine_ethiopia_sf) &&
+  nrow(bovine_ethiopia_sf) > 0
+) {
+
+  figure6b_survey_points <- bovine_ethiopia_sf |>
+    sf::st_drop_geometry() |>
+    dplyr::transmute(
+      Survey_point_ID =
+        dplyr::row_number(),
+
+      Longitude =
+        as.numeric(lon),
+
+      Latitude =
+        as.numeric(lat),
+
+      Sample_size =
+        as.integer(Number_of_animal_tested),
+
+      Number_infected =
+        as.integer(Number_of_infections),
+
+      Observed_prevalence =
+        as.numeric(Prevalence),
+
+      Test_type = dplyr::case_when(
+        Test_Type == "BCT/HCT" ~ "HCT/BCT",
+        Test_Type == "BCT" ~ "HCT/BCT",
+        Test_Type == "HCT/BCT" ~ "HCT/BCT",
+        Test_Type == "PCR" ~ "PCR",
+        TRUE ~ as.character(Test_Type)
+      )
+    ) |>
+    dplyr::arrange(
+      Test_type,
+      Longitude,
+      Latitude
+    )
+
+} else {
+
+  figure6b_survey_points <- data.frame(
+    Survey_point_ID = integer(0),
+    Longitude = numeric(0),
+    Latitude = numeric(0),
+    Sample_size = integer(0),
+    Number_infected = integer(0),
+    Observed_prevalence = numeric(0),
+    Test_type = character(0)
+  )
+}
+
+# ------------------------------------------------------------
+# 8. Summary-statistics helper
+# ------------------------------------------------------------
+
+figure6b_make_summary <- function(
+    values,
+    measure_name
+) {
+
+  values <- values[
+    is.finite(values)
+  ]
+
+  data.frame(
+    Uncertainty_measure =
+      measure_name,
+
+    Number_of_districts =
+      length(values),
+
+    Mean =
+      mean(
+        values,
+        na.rm = TRUE
+      ),
+
+    Standard_deviation =
+      stats::sd(
+        values,
+        na.rm = TRUE
+      ),
+
+    Minimum =
+      min(
+        values,
+        na.rm = TRUE
+      ),
+
+    Lower_2.5_percentile =
+      as.numeric(
+        stats::quantile(
+          values,
+          probs = 0.025,
+          na.rm = TRUE
+        )
+      ),
+
+    Median =
+      stats::median(
+        values,
+        na.rm = TRUE
+      ),
+
+    Upper_97.5_percentile =
+      as.numeric(
+        stats::quantile(
+          values,
+          probs = 0.975,
+          na.rm = TRUE
+        )
+      ),
+
+    Maximum =
+      max(
+        values,
+        na.rm = TRUE
+      ),
+
+    stringsAsFactors = FALSE
+  )
+}
+
+figure6b_summary_statistics <- dplyr::bind_rows(
+
+  figure6b_make_summary(
+    figure6b_district_values$
+      Relative_diagnostic_uncertainty,
+    "Relative diagnostic uncertainty"
+  ),
+
+  figure6b_make_summary(
+    figure6b_district_values$
+      Relative_coverage_uncertainty,
+    "Relative coverage uncertainty"
+  ),
+
+  figure6b_make_summary(
+    figure6b_district_values$
+      Diagnostic_variance,
+    "Diagnostic variance"
+  )
+)
+
+# ------------------------------------------------------------
+# 9. Add interpolation counts
+# ------------------------------------------------------------
+
+figure6b_interpolation_summary <- data.frame(
+  Uncertainty_measure = c(
+    "Relative diagnostic uncertainty",
+    "Relative coverage uncertainty",
+    "Diagnostic variance"
+  ),
+
+  Directly_aggregated_districts = c(
+    sum(
+      !figure6b_district_values$
+        Diagnostic_value_interpolated,
+      na.rm = TRUE
+    ),
+
+    sum(
+      !figure6b_district_values$
+        Coverage_value_interpolated,
+      na.rm = TRUE
+    ),
+
+    sum(
+      !figure6b_district_values$
+        Variance_value_interpolated,
+      na.rm = TRUE
+    )
+  ),
+
+  Interpolated_districts = c(
+    sum(
+      figure6b_district_values$
+        Diagnostic_value_interpolated,
+      na.rm = TRUE
+    ),
+
+    sum(
+      figure6b_district_values$
+        Coverage_value_interpolated,
+      na.rm = TRUE
+    ),
+
+    sum(
+      figure6b_district_values$
+        Variance_value_interpolated,
+      na.rm = TRUE
+    )
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+figure6b_summary_statistics <-
+  figure6b_summary_statistics |>
+  dplyr::left_join(
+    figure6b_interpolation_summary,
+    by = "Uncertainty_measure",
+    relationship = "one-to-one"
+  )
+
+# ------------------------------------------------------------
+# 10. Plot settings
+# ------------------------------------------------------------
+
+figure6b_plot_settings <- data.frame(
+  Setting = c(
+    "Administrative level",
+    "Administrative identifier",
+    "Prediction datasets",
+    "Prediction grid cells",
+    "Analysis scale",
+    "Diagnostic variance",
+    "Coverage variance",
+    "Total variance",
+    "Relative diagnostic uncertainty",
+    "Relative coverage uncertainty",
+    "District aggregation",
+    "Missing-district interpolation",
+    "Interpolation neighbours",
+    "Interpolation weighting",
+    "Relative-map colour limits",
+    "Diagnostic-variance colour limits",
+    "Colour palette",
+    "Histogram bin width",
+    "Histogram boundary",
+    "Histogram closure",
+    "Histogram x-axis limits",
+    "Histogram x-axis breaks",
+    "Boxplot width",
+    "Survey-point size range",
+    "Survey-point size breaks",
+    "Survey-point shape",
+    "Coordinate reference system"
+  ),
+
+  Value = c(
+    "GADM level 3 Ethiopian administrative districts",
+    "GID_3",
+    as.character(n_datasets),
+    as.character(n_units),
+    "Logit prevalence scale",
+
+    paste(
+      "Variance across the 1,000",
+      "corrected-prevalence model datasets"
+    ),
+
+    paste(
+      "Mean squared within-dataset standard deviation,",
+      "estimated from the 2.5th and 97.5th percentiles"
+    ),
+
+    "Diagnostic variance plus coverage variance",
+
+    paste(
+      "Diagnostic variance divided by",
+      "total variance"
+    ),
+
+    paste(
+      "Coverage variance divided by",
+      "total variance"
+    ),
+
+    paste(
+      "Arithmetic mean of prediction-grid values",
+      "within each GADM level-3 district"
+    ),
+
+    paste(
+      "Districts containing no prediction-grid points",
+      "were assigned an inverse-distance-weighted value"
+    ),
+
+    "Five nearest prediction-grid points",
+
+    paste(
+      "Inverse distance, with 1e-10 added",
+      "to avoid division by zero"
+    ),
+
+    "0 to 1",
+
+    paste0(
+      format(
+        min(
+          zone_between_var$zone_value,
+          na.rm = TRUE
+        ),
+        scientific = TRUE,
+        digits = 8
+      ),
+      " to ",
+      format(
+        max(
+          zone_between_var$zone_value,
+          na.rm = TRUE
+        ),
+        scientific = TRUE,
+        digits = 8
+      )
+    ),
+
+    "viridis magma",
+    "0.04",
+    "0",
+    "Left-closed",
+    "0 to 1",
+    "0, 0.2, 0.4, 0.6, 0.8 and 1",
+    "0.8",
+    "1 to 10",
+    "10, 50, 100 and 200",
+    "HCT/BCT = 21; PCR = 22",
+    "WGS84, EPSG:4326"
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 11. README
+# ------------------------------------------------------------
+
+figure6b_readme <- data.frame(
+  Item = c(
+    "Workbook description",
+    "Associated figure",
+    "District_values sheet",
+    "Distribution_values sheet",
+    "Grid_values sheet",
+    "Survey_points sheet",
+    "Plot_settings sheet",
+    "Summary_statistics sheet",
+    "Relative diagnostic uncertainty",
+    "Relative coverage uncertainty",
+    "Diagnostic variance",
+    "Coverage variance",
+    "Value_source",
+    "Interpolated values",
+    "Grid coordinate columns",
+    "Administrative geometry",
+    "Units"
+  ),
+
+  Description = c(
+    paste(
+      "Source data underlying Figure 6B, including",
+      "Ethiopian district-level uncertainty measures,",
+      "prediction-grid uncertainty values, distribution",
+      "plot inputs and bovine survey-point overlays."
+    ),
+
+    "Figure 6B.",
+
+    paste(
+      "One row per unique Ethiopian GADM level-3",
+      "administrative polygon. Contains all three mapped",
+      "uncertainty measures, within-district summaries",
+      "and interpolation indicators."
+    ),
+
+    paste(
+      "Long-format district values used directly by",
+      "the choropleths, histograms and boxplots."
+    ),
+
+    paste(
+      "Prediction-grid uncertainty decomposition before",
+      "aggregation to Ethiopian districts."
+    ),
+
+    paste(
+      "Bovine survey locations plotted over each",
+      "uncertainty choropleth."
+    ),
+
+    paste(
+      "Transformations, interpolation rules, scale",
+      "limits and plotting parameters."
+    ),
+
+    paste(
+      "Descriptive summaries and counts of directly",
+      "aggregated and interpolated districts."
+    ),
+
+    paste(
+      "Proportion of total logit-scale variance",
+      "attributed to variation across corrected-",
+      "prevalence datasets."
+    ),
+
+    paste(
+      "Proportion of total logit-scale variance",
+      "attributed to uncertainty within each spatial",
+      "model projection."
+    ),
+
+    paste(
+      "Variance across corrected-prevalence model",
+      "datasets on the logit prevalence scale."
+    ),
+
+    paste(
+      "Mean within-dataset variance estimated from",
+      "the 2.5th and 97.5th percentiles."
+    ),
+
+    paste(
+      "Indicates whether the district value was",
+      "calculated from prediction-grid points lying",
+      "within the polygon or by interpolation."
+    ),
+
+    paste(
+      "An interpolated district has",
+      "Number_of_grid_points equal to zero and was",
+      "assigned a value from the five nearest points."
+    ),
+
+    paste(
+      "The projection files store geographical",
+      "coordinates in reversed Longitude and Latitude",
+      "columns. Plot_longitude and Plot_latitude are",
+      "the corrected coordinates used for aggregation."
+    ),
+
+    paste(
+      "Administrative geometry is obtained separately",
+      "from GADM and is not embedded in the workbook."
+    ),
+
+    paste(
+      "Relative uncertainty measures are proportions;",
+      "variance measures are on the squared logit-",
+      "prevalence scale."
+    )
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+# ------------------------------------------------------------
+# 12. Create workbook
+# ------------------------------------------------------------
+
+figure6b_wb <- openxlsx::createWorkbook(
+  creator = "AR Kaye",
+  title = "Figure 6B source data",
+  subject = paste(
+    "Ethiopia uncertainty decomposition maps,",
+    "histograms and boxplots"
+  ),
+  category = "Research data"
+)
+
+openxlsx::addWorksheet(
+  figure6b_wb,
+  "README"
+)
+
+openxlsx::addWorksheet(
+  figure6b_wb,
+  "District_values"
+)
+
+openxlsx::addWorksheet(
+  figure6b_wb,
+  "Distribution_values"
+)
+
+openxlsx::addWorksheet(
+  figure6b_wb,
+  "Grid_values"
+)
+
+openxlsx::addWorksheet(
+  figure6b_wb,
+  "Survey_points"
+)
+
+openxlsx::addWorksheet(
+  figure6b_wb,
+  "Plot_settings"
+)
+
+openxlsx::addWorksheet(
+  figure6b_wb,
+  "Summary_statistics"
+)
+
+openxlsx::writeData(
+  figure6b_wb,
+  "README",
+  figure6b_readme
+)
+
+openxlsx::writeData(
+  figure6b_wb,
+  "District_values",
+  figure6b_district_values
+)
+
+openxlsx::writeData(
+  figure6b_wb,
+  "Distribution_values",
+  figure6b_distribution_values
+)
+
+openxlsx::writeData(
+  figure6b_wb,
+  "Grid_values",
+  figure6b_grid_values
+)
+
+openxlsx::writeData(
+  figure6b_wb,
+  "Survey_points",
+  figure6b_survey_points
+)
+
+openxlsx::writeData(
+  figure6b_wb,
+  "Plot_settings",
+  figure6b_plot_settings
+)
+
+openxlsx::writeData(
+  figure6b_wb,
+  "Summary_statistics",
+  figure6b_summary_statistics
+)
+
+# ------------------------------------------------------------
+# 13. Workbook styles
+# ------------------------------------------------------------
+
+figure6b_header_style <- openxlsx::createStyle(
+  fontColour = "#FFFFFF",
+  fgFill = "#1F4E78",
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  border = "bottom",
+  borderColour = "#FFFFFF"
+)
+
+figure6b_decimal_style <- openxlsx::createStyle(
+  numFmt = "0.000000"
+)
+
+figure6b_variance_style <- openxlsx::createStyle(
+  numFmt = "0.0000000000"
+)
+
+figure6b_integer_style <- openxlsx::createStyle(
+  numFmt = "0"
+)
+
+figure6b_percentage_style <- openxlsx::createStyle(
+  numFmt = "0.000%"
+)
+
+figure6b_wrap_style <- openxlsx::createStyle(
+  wrapText = TRUE,
+  valign = "top"
+)
+
+# ------------------------------------------------------------
+# 14. Formatting helper
+# ------------------------------------------------------------
+
+figure6b_format_data_sheet <- function(
+    workbook,
+    sheet_name,
+    data_object
+) {
+
+  if (ncol(data_object) < 1) {
+    return(invisible(NULL))
+  }
+
+  openxlsx::addStyle(
+    workbook,
+    sheet = sheet_name,
+    style = figure6b_header_style,
+    rows = 1,
+    cols = seq_len(ncol(data_object)),
+    gridExpand = TRUE
+  )
+
+  openxlsx::setColWidths(
+    workbook,
+    sheet = sheet_name,
+    cols = seq_len(ncol(data_object)),
+    widths = "auto"
+  )
+
+  openxlsx::freezePane(
+    workbook,
+    sheet = sheet_name,
+    firstRow = TRUE
+  )
+
+  openxlsx::addFilter(
+    workbook,
+    sheet = sheet_name,
+    row = 1,
+    cols = seq_len(ncol(data_object))
+  )
+}
+
+figure6b_format_data_sheet(
+  figure6b_wb,
+  "District_values",
+  figure6b_district_values
+)
+
+figure6b_format_data_sheet(
+  figure6b_wb,
+  "Distribution_values",
+  figure6b_distribution_values
+)
+
+figure6b_format_data_sheet(
+  figure6b_wb,
+  "Grid_values",
+  figure6b_grid_values
+)
+
+figure6b_format_data_sheet(
+  figure6b_wb,
+  "Survey_points",
+  figure6b_survey_points
+)
+
+figure6b_format_data_sheet(
+  figure6b_wb,
+  "Summary_statistics",
+  figure6b_summary_statistics
+)
+
+# ------------------------------------------------------------
+# 15. README formatting
+# ------------------------------------------------------------
+
+openxlsx::addStyle(
+  figure6b_wb,
+  "README",
+  figure6b_header_style,
+  rows = 1,
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::addStyle(
+  figure6b_wb,
+  "README",
+  figure6b_wrap_style,
+  rows = 2:(nrow(figure6b_readme) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::setColWidths(
+  figure6b_wb,
+  "README",
+  cols = 1,
+  widths = 32
+)
+
+openxlsx::setColWidths(
+  figure6b_wb,
+  "README",
+  cols = 2,
+  widths = 90
+)
+
+openxlsx::freezePane(
+  figure6b_wb,
+  "README",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# 16. Plot-settings formatting
+# ------------------------------------------------------------
+
+openxlsx::addStyle(
+  figure6b_wb,
+  "Plot_settings",
+  figure6b_header_style,
+  rows = 1,
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::addStyle(
+  figure6b_wb,
+  "Plot_settings",
+  figure6b_wrap_style,
+  rows = 2:(nrow(figure6b_plot_settings) + 1),
+  cols = 1:2,
+  gridExpand = TRUE
+)
+
+openxlsx::setColWidths(
+  figure6b_wb,
+  "Plot_settings",
+  cols = 1,
+  widths = 42
+)
+
+openxlsx::setColWidths(
+  figure6b_wb,
+  "Plot_settings",
+  cols = 2,
+  widths = 90
+)
+
+openxlsx::freezePane(
+  figure6b_wb,
+  "Plot_settings",
+  firstRow = TRUE
+)
+
+# ------------------------------------------------------------
+# 17. Numeric formatting: District_values
+# ------------------------------------------------------------
+
+figure6b_relative_columns <- match(
+  c(
+    "Relative_diagnostic_uncertainty",
+    "Relative_coverage_uncertainty",
+    "Relative_components_sum",
+    "Relative_components_difference_from_one"
+  ),
+  names(figure6b_district_values)
+)
+
+figure6b_relative_columns <-
+  figure6b_relative_columns[
+    !is.na(figure6b_relative_columns)
+  ]
+
+if (
+  nrow(figure6b_district_values) > 0 &&
+  length(figure6b_relative_columns) > 0
+) {
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "District_values",
+    figure6b_percentage_style,
+    rows = 2:(nrow(figure6b_district_values) + 1),
+    cols = figure6b_relative_columns,
+    gridExpand = TRUE
+  )
+}
+
+figure6b_variance_columns <- match(
+  c(
+    "Diagnostic_variance",
+    "Diagnostic_variance_median",
+    "Diagnostic_variance_minimum",
+    "Diagnostic_variance_maximum"
+  ),
+  names(figure6b_district_values)
+)
+
+figure6b_variance_columns <-
+  figure6b_variance_columns[
+    !is.na(figure6b_variance_columns)
+  ]
+
+if (
+  nrow(figure6b_district_values) > 0 &&
+  length(figure6b_variance_columns) > 0
+) {
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "District_values",
+    figure6b_variance_style,
+    rows = 2:(nrow(figure6b_district_values) + 1),
+    cols = figure6b_variance_columns,
+    gridExpand = TRUE
+  )
+}
+
+figure6b_integer_columns <- match(
+  c(
+    "Number_of_grid_points",
+    "Coverage_number_of_grid_points",
+    "Variance_number_of_grid_points"
+  ),
+  names(figure6b_district_values)
+)
+
+figure6b_integer_columns <-
+  figure6b_integer_columns[
+    !is.na(figure6b_integer_columns)
+  ]
+
+if (
+  nrow(figure6b_district_values) > 0 &&
+  length(figure6b_integer_columns) > 0
+) {
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "District_values",
+    figure6b_integer_style,
+    rows = 2:(nrow(figure6b_district_values) + 1),
+    cols = figure6b_integer_columns,
+    gridExpand = TRUE
+  )
+}
+
+# ------------------------------------------------------------
+# 18. Numeric formatting: Distribution_values
+# ------------------------------------------------------------
+
+figure6b_distribution_value_column <- match(
+  "Plotted_value",
+  names(figure6b_distribution_values)
+)
+
+if (
+  nrow(figure6b_distribution_values) > 0 &&
+  !is.na(figure6b_distribution_value_column)
+) {
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "Distribution_values",
+    figure6b_decimal_style,
+    rows = 2:(nrow(figure6b_distribution_values) + 1),
+    cols = figure6b_distribution_value_column,
+    gridExpand = TRUE
+  )
+}
+
+# ------------------------------------------------------------
+# 19. Numeric formatting: Grid_values
+# ------------------------------------------------------------
+
+figure6b_grid_coordinate_columns <- match(
+  c(
+    "Original_Latitude_column",
+    "Original_Longitude_column",
+    "Plot_longitude",
+    "Plot_latitude"
+  ),
+  names(figure6b_grid_values)
+)
+
+figure6b_grid_coordinate_columns <-
+  figure6b_grid_coordinate_columns[
+    !is.na(figure6b_grid_coordinate_columns)
+  ]
+
+if (
+  nrow(figure6b_grid_values) > 0 &&
+  length(figure6b_grid_coordinate_columns) > 0
+) {
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "Grid_values",
+    figure6b_decimal_style,
+    rows = 2:(nrow(figure6b_grid_values) + 1),
+    cols = figure6b_grid_coordinate_columns,
+    gridExpand = TRUE
+  )
+}
+
+figure6b_grid_variance_columns <- match(
+  c(
+    "Diagnostic_variance",
+    "Coverage_variance",
+    "Total_variance"
+  ),
+  names(figure6b_grid_values)
+)
+
+figure6b_grid_variance_columns <-
+  figure6b_grid_variance_columns[
+    !is.na(figure6b_grid_variance_columns)
+  ]
+
+if (
+  nrow(figure6b_grid_values) > 0 &&
+  length(figure6b_grid_variance_columns) > 0
+) {
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "Grid_values",
+    figure6b_variance_style,
+    rows = 2:(nrow(figure6b_grid_values) + 1),
+    cols = figure6b_grid_variance_columns,
+    gridExpand = TRUE
+  )
+}
+
+figure6b_grid_relative_columns <- match(
+  c(
+    "Relative_coverage_uncertainty",
+    "Relative_diagnostic_uncertainty",
+    "Relative_components_sum"
+  ),
+  names(figure6b_grid_values)
+)
+
+figure6b_grid_relative_columns <-
+  figure6b_grid_relative_columns[
+    !is.na(figure6b_grid_relative_columns)
+  ]
+
+if (
+  nrow(figure6b_grid_values) > 0 &&
+  length(figure6b_grid_relative_columns) > 0
+) {
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "Grid_values",
+    figure6b_percentage_style,
+    rows = 2:(nrow(figure6b_grid_values) + 1),
+    cols = figure6b_grid_relative_columns,
+    gridExpand = TRUE
+  )
+}
+
+# ------------------------------------------------------------
+# 20. Numeric formatting: Survey_points
+# ------------------------------------------------------------
+
+if (nrow(figure6b_survey_points) > 0) {
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "Survey_points",
+    figure6b_decimal_style,
+    rows = 2:(nrow(figure6b_survey_points) + 1),
+    cols = c(2, 3),
+    gridExpand = TRUE
+  )
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "Survey_points",
+    figure6b_integer_style,
+    rows = 2:(nrow(figure6b_survey_points) + 1),
+    cols = c(1, 4, 5),
+    gridExpand = TRUE
+  )
+
+  openxlsx::addStyle(
+    figure6b_wb,
+    "Survey_points",
+    figure6b_percentage_style,
+    rows = 2:(nrow(figure6b_survey_points) + 1),
+    cols = 6,
+    gridExpand = TRUE
+  )
+}
+
+# ------------------------------------------------------------
+# 21. Save workbook
+# ------------------------------------------------------------
+
+figure6b_output_file <- file.path(
+  figure6b_output_dir,
+  "Figure_6B_source_data.xlsx"
+)
+
+openxlsx::saveWorkbook(
+  figure6b_wb,
+  file = figure6b_output_file,
+  overwrite = TRUE
+)
+
+message(
+  "Figure 6B source-data workbook saved to: ",
+  figure6b_output_file
+)
+
+message(
+  "District rows exported: ",
+  nrow(figure6b_district_values)
+)
+
+message(
+  "Distribution values exported: ",
+  nrow(figure6b_distribution_values)
+)
+
+message(
+  "Prediction-grid rows exported: ",
+  nrow(figure6b_grid_values)
+)
+
+message(
+  "Survey points exported: ",
+  nrow(figure6b_survey_points)
+)
