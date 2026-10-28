@@ -1,3 +1,5 @@
+# NGA display update: matches ETH relative colour ranges; crops histogram/boxplot views.
+# Analysis, coordinate handling, input files and exported numerical values unchanged.
 rm(list=ls())
 
 library(ggplot2)
@@ -16,6 +18,29 @@ library(viridis)
 library(gridExtra)
 library(grid)
 library(ggspatial)
+
+# The supplied histogram supports a focused linear 0-25% between-dataset scale.
+# Complementary within-dataset values use 75-100%; scales are labelled separately.
+# Calculation, aggregation, file selection and coordinate handling are unchanged.
+relative_between_limits <- c(0, 0.25)
+relative_within_limits <- c(0.75, 1)
+
+make_uncertainty_spec <- function(limits, proportion = TRUE, breaks = NULL) {
+  if (is.null(breaks)) breaks <- pretty(limits, n = 5)
+  breaks <- sort(unique(c(limits, breaks[breaks >= limits[1] & breaks <= limits[2]])))
+  labels <- if (proportion) scales::percent(breaks, accuracy = 1) else
+    scales::label_number()(breaks)
+  if (proportion && limits[1] > 0) labels[1] <- paste0("<=", labels[1])
+  if (proportion && limits[2] < 1) labels[length(labels)] <- paste0(">=", labels[length(labels)])
+  list(limits = limits, breaks = breaks, labels = labels,
+       proportion = proportion, binwidth = if (proportion) 0.01 else diff(limits)/25)
+}
+uncertainty_fill_scale <- function(spec, name = NULL, guide = "colourbar") {
+  ggplot2::scale_fill_viridis_c(name = name, option = "magma",
+    limits = spec$limits, breaks = spec$breaks, labels = spec$labels,
+    trans = "identity", oob = scales::squish, na.value = "grey90", guide = guide)
+}
+
 
 
 
@@ -321,7 +346,7 @@ lga_rel_within <- aggregate_uncertainty_by_lga(rel_within_sf)
 lga_between_var <- aggregate_uncertainty_by_lga(between_var_sf)
 
 # Function to create choropleth map for uncertainty measures
-create_uncertainty_choropleth <- function(lga_data, title_suffix, legend_title, color_limits = c(0, 1)) {
+create_uncertainty_choropleth <- function(lga_data, title_suffix, legend_title, spec) {
   # Join LGA-level uncertainty back to LGA polygons
   nigeria_lgas_final <- nigeria_lgas_sf %>%
     left_join(lga_data, by = "GID_2")
@@ -342,14 +367,12 @@ create_uncertainty_choropleth <- function(lga_data, title_suffix, legend_title, 
     geom_point(data = st_drop_geometry(bovine_nigeria_sf), 
                aes(x = lon, y = lat, size = Number_of_animal_tested, shape = Test_Type), colour="black", fill="white", stroke=0.8,
                alpha = 0.8) +  # Increased from 0.7 to 0.8 for better visibility
-    scale_fill_viridis_c(
-      name = legend_title,
-      na.value = "grey90",
-      direction = 1,
-      option = "magma",
-      limits = color_limits,
-      labels = if(max(color_limits) <= 1) scales::percent_format(accuracy = 0.1) else scales::number_format(accuracy = 0.001)
-    ) +
+    # Set the continuous bar itself explicitly: legend.key.height alone can
+    # leave its length dependent on the ggplot2 version's guide defaults.
+    uncertainty_fill_scale(spec, name = legend_title,
+      guide = ggplot2::guide_colourbar(
+        barheight = grid::unit(7.5, "cm"),
+        barwidth = grid::unit(0.5, "cm"))) +
     # Add size legend for sample size
     scale_size_continuous(name = "Sample size", 
                          range = c(1, 10),  # Increased from c(1, 4) to make sizes more distinguishable
@@ -380,95 +403,90 @@ create_uncertainty_choropleth <- function(lga_data, title_suffix, legend_title, 
       legend.position = "right",
       legend.key.height = unit(1.5, "cm"),
       legend.key.width = unit(0.5, "cm"),
-      legend.spacing.y = unit(1, "cm"),  # Add vertical spacing between legends
+      legend.spacing.y = unit(1, "cm"),  # Original spacing between legends
       legend.box.spacing = unit(1, "cm")  # Add spacing between legend boxes
     )
   
+  n_clipped <- sum(lga_data$lga_value < spec$limits[1] |
+                   lga_data$lga_value > spec$limits[2], na.rm = TRUE)
+  if (n_clipped > 0) p <- p + labs(caption = paste(n_clipped,
+    "LGA values fall outside the colour range and use its endpoint colours.")) +
+    theme(plot.caption = element_text(size = 8, colour = "grey50", hjust = 0.5))
   return(p)
 }
 
-# Function to create combined histogram and boxplot for uncertainty measures
-create_uncertainty_combined_plot <- function(lga_data, estimate_name, x_label) {
-  # Histogram with viridis color scale matching choropleth
+# Histograms and maps share the same colour mapping. coord_cartesian crops
+# the display only; histogram counts and boxplot summaries use all observations.
+create_uncertainty_combined_plot <- function(lga_data, estimate_name, x_label, spec) {
+  finite_values <- lga_data$lga_value[is.finite(lga_data$lga_value)]
+  stopifnot(length(finite_values) > 0L)
+  view_limits <- spec$limits
+  axis_breaks <- spec$breaks
+  axis_labels <- if (spec$proportion) scales::percent_format(accuracy = 1) else
+    scales::label_number()
   p_hist <- ggplot(lga_data, aes(x = lga_value, fill = after_stat(x))) +
-    geom_histogram(binwidth = 0.04, color = "white", linewidth = 0.2,
-                   boundary = 0, closed = "left") +
-    scale_fill_viridis_c(option = "magma", guide = "none") +  # Same as choropleth, no legend
-    scale_x_continuous(labels = if(max(lga_data$lga_value, na.rm = TRUE) <= 1) scales::percent_format() else scales::number_format(accuracy = 0.001),
-                       breaks = seq(0, 1, by = 0.2),
-                       limits = c(0, 1),
+    geom_histogram(binwidth = spec$binwidth, boundary = 0, closed = "left",
+                   colour = "white", linewidth = 0.2) +
+    uncertainty_fill_scale(spec, guide = "none") +
+    scale_x_continuous(breaks = axis_breaks, labels = axis_labels,
                        expand = expansion(mult = c(0.02, 0.02))) +
+    coord_cartesian(xlim = view_limits, expand = FALSE) +
     scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
     theme_minimal() +
-    theme(
-      plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
-      axis.title.y = element_blank(),  # Remove y-axis title
-      axis.text.y = element_blank(),   # Remove y-axis tick labels
-      axis.ticks.y = element_blank(),  # Remove y-axis ticks
-      panel.grid.minor = element_blank(),
-      panel.grid.major = element_blank(),  # Remove all grid lines
-      plot.margin = margin(t = 5, r = 15, b = 0, l = 15),  # More left/right margins
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank()
-    ) +
-    labs(
-      title = paste("Distribution of", estimate_name, "by LGA in Nigeria"),
-      x = ""
-    )
-  
-  # Boxplot with viridis color matching choropleth
-  viridis_color <- viridis::viridis(1, begin = 0.5, end = 0.5, option = "magma")  # Mid-range viridis color
-  
+    theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
+          axis.title.y = element_blank(), axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(), panel.grid = element_blank(),
+          axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+          plot.margin = margin(t = 5, r = 15, b = 0, l = 15)) +
+    labs(title = paste("Distribution of", estimate_name, "by LGA in Nigeria"), x = "")
   p_box <- ggplot(lga_data, aes(x = lga_value, y = 1)) +
-    geom_boxplot(fill = viridis_color, alpha = 0.8, width = 0.8) +  # Much wider boxplot, no jitter
-    scale_x_continuous(labels = if(max(lga_data$lga_value, na.rm = TRUE) <= 1) scales::percent_format() else scales::number_format(accuracy = 0.001),
-                       breaks = seq(0, 1, by = 0.2),
-                       limits = c(0, 1),
+    geom_boxplot(fill = "grey70", alpha = 0.8, width = 0.8) +
+    scale_x_continuous(breaks = axis_breaks, labels = axis_labels,
                        expand = expansion(mult = c(0.02, 0.02))) +
-    scale_y_continuous(limits = c(0.2, 1.8), expand = c(0, 0)) +  # More vertical space
+    coord_cartesian(xlim = view_limits, expand = FALSE) +
+    scale_y_continuous(limits = c(0.2, 1.8), expand = c(0, 0)) +
     theme_minimal() +
-    theme(
-      axis.title.x = element_text(size = 10, margin = margin(t = 5)),
-      axis.text.x = element_text(size = 9),
-      axis.ticks.x = element_line(),
-      axis.title.y = element_blank(),  # Remove y-axis title
-      axis.text.y = element_blank(),   # Remove y-axis text
-      axis.ticks.y = element_blank(),  # Remove y-axis ticks
-      panel.grid.major = element_blank(),  # Remove all grid lines
-      panel.grid.minor = element_blank(),
-      plot.margin = margin(t = 0, r = 15, b = 5, l = 15)  # Same margins as histogram for alignment
-    ) +
-    labs(
-      x = x_label
-    )
-  
-  # Create title
-  title <- grid::textGrob(paste("Uncertainty Analysis -", estimate_name), 
+    theme(axis.title.x = element_text(size = 10, margin = margin(t = 5)),
+          axis.text.x = element_text(size = 9), axis.ticks.x = element_line(),
+          axis.title.y = element_blank(), axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(), panel.grid = element_blank(),
+          plot.margin = margin(t = 0, r = 15, b = 5, l = 15)) +
+    labs(x = x_label)
+  n_outside <- sum(finite_values < view_limits[1] | finite_values > view_limits[2])
+  title_text <- paste("Uncertainty Analysis -", estimate_name)
+  if (n_outside > 0) title_text <- paste0(title_text, "\n", n_outside,
+    " LGA values outside displayed range; retained in summaries")
+  title <- grid::textGrob(title_text,
                          gp = grid::gpar(fontsize = 14, fontface = "bold"))
-  
-  # Combine plots with custom heights
-  combined_plot <- grid.arrange(
-    title,
-    p_hist,
-    p_box,
-    nrow = 3,
-    heights = unit(c(0.8, 3.5, 2.5), "cm")  # Small title, histogram, much taller boxplot
-  )
-  
-  return(combined_plot)
+  gridExtra::arrangeGrob(title, p_hist, p_box, nrow = 3,
+                        heights = grid::unit(c(if (n_outside > 0) 1.4 else 0.8, 3.5, 2.5), "cm"))
 }
 
-# Create choropleth maps
-p_rel_between <- create_uncertainty_choropleth(lga_rel_between, "\n (relative variability from diagnostic uncertainty)", "Relative\nimportance", c(0, 1))
-p_rel_within <- create_uncertainty_choropleth(lga_rel_within, "(relative variability from coverage uncertainty)", "Relative\nimportance", c(0, 1))
-p_between_var <- create_uncertainty_choropleth(lga_between_var, "(Variance from diagnostic uncertainty)", "Variance", c(min(lga_between_var$lga_value, na.rm = TRUE), max(lga_between_var$lga_value, na.rm = TRUE)))
+between_spec <- make_uncertainty_spec(relative_between_limits, TRUE, seq(0, 0.25, 0.05))
+within_spec <- make_uncertainty_spec(relative_within_limits, TRUE, seq(0.75, 1, 0.05))
+variance_limits <- range(lga_between_var$lga_value, na.rm = TRUE)
+if (!all(is.finite(variance_limits))) stop("No finite between-dataset variance values.")
+if (diff(variance_limits) == 0) variance_limits <- c(0, max(variance_limits[2], 1e-6))
+variance_spec <- make_uncertainty_spec(variance_limits, FALSE)
 
-# Create combined histogram and boxplot analyses
-p_rel_between_combined <- create_uncertainty_combined_plot(lga_rel_between, "relative variability from diagnostic uncertainty", "Relative importance of variability from diagnostic uncertainty")
-p_rel_within_combined <- create_uncertainty_combined_plot(lga_rel_within, "relative variability from coverage uncertainty", "Relative importance of variability from coverage uncertainty")
-p_between_var_combined <- create_uncertainty_combined_plot(lga_between_var, "variance from diagnostic uncertainty", "Variance from diagnostic uncertainty")
+p_rel_between <- create_uncertainty_choropleth(lga_rel_between,
+  "\n (relative variability from diagnostic uncertainty)", "Relative\nimportance", between_spec)
+p_rel_within <- create_uncertainty_choropleth(lga_rel_within,
+  "\n (relative variability from coverage uncertainty)", "Relative\nimportance", within_spec)
+p_between_var <- create_uncertainty_choropleth(lga_between_var,
+  "\n (Variance from diagnostic uncertainty)", "Variance\n(logit scale)", variance_spec)
+
+p_rel_between_combined <- create_uncertainty_combined_plot(lga_rel_between,
+  "relative variability from diagnostic uncertainty",
+  "Relative importance of variability from diagnostic uncertainty", between_spec)
+p_rel_within_combined <- create_uncertainty_combined_plot(lga_rel_within,
+  "relative variability from coverage uncertainty",
+  "Relative importance of variability from coverage uncertainty", within_spec)
+p_between_var_combined <- create_uncertainty_combined_plot(lga_between_var,
+  "variance from diagnostic uncertainty", "Variance from diagnostic uncertainty (logit scale)", variance_spec)
 
 # Save all choropleth maps
+dir.create("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA", recursive = TRUE, showWarnings = FALSE)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_rel_between_choropleth.pdf", plot = p_rel_between, width = 12, height = 10)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_rel_within_choropleth.pdf", plot = p_rel_within, width = 12, height = 10)
 ggsave("Code/Prevalence/Bovine BCT and PCR/Analysis_NGA/lga_between_var_choropleth.pdf", plot = p_between_var, width = 12, height = 10)
@@ -500,33 +518,25 @@ if(nrow(lga_between_var) > 0) {
 
 
 
-#plot rel_between
+# Grid-level diagnostic plots use the same 0-25% display scale.
 ggplot(dpm_var) + geom_tile(aes(Latitude, Longitude, fill = rel_between)) +
   coord_fixed(ratio = 1) +
-  scale_fill_gradient(
-    name = "Relative importance of\nbetween-dataset variability",
-    low = "blue", high = "orange",
-    limits = c(0, 1),
-    guide = guide_colorbar(order = 2)
-  ) +
-  new_scale_fill() +  # Add a new fill scale
-  #geom_tile(data=water_cover, aes(Longitude, Latitude,fill=water_cover,alpha=water_cover),inherit.aes = FALSE)+
-  scale_fill_manual(
-  name = "",  # Colorbar title
-  values = c("High uncertainty" = "grey50", "Water" = "steelblue1"),  # Specific colors for categories
-  limits = c("High uncertainty", "Water"),
-  guide = guide_legend(order = 1)
-)
-ggsave("Relative_uncertainty_between.png",width = 12, height = 8)
+  uncertainty_fill_scale(between_spec,
+    name = "Relative importance of\nbetween-dataset variability")
+ggsave("Relative_uncertainty_between.png", width = 12, height = 8)
 
-
-#plot histogram of dpm_var$rel_between
 ggplot(dpm_var, aes(x = rel_between)) +
-  geom_histogram(binwidth = 0.05, fill = "black", color = "black", alpha = 0.7) +
-  labs(
-       x = "Relative importance of between-dataset variability",
-       y = "Frequency")
-ggsave("Relative_uncertainty_between_histogram.png",width = 8, height = 6)
+  geom_histogram(aes(fill = after_stat(x)), binwidth = between_spec$binwidth,
+                 boundary = 0, closed = "left", colour = "white") +
+  uncertainty_fill_scale(between_spec, guide = "none") +
+  scale_x_continuous(breaks = between_spec$breaks,
+                     labels = scales::percent_format(accuracy = 1)) +
+  coord_cartesian(xlim = relative_between_limits, expand = FALSE) +
+  labs(x = "Relative importance of between-dataset variability", y = "Frequency",
+       caption = paste(sum(dpm_var$rel_between > 0.25, na.rm = TRUE),
+                       "grid values above 25%; retained in calculations and source data"))
+ggsave("Relative_uncertainty_between_histogram.png", width = 8, height = 6)
+
 
 
 
@@ -1128,7 +1138,7 @@ figure6a_plot_settings <- data.frame(
     ),
     "Five nearest prediction-grid points",
     "Inverse distance with 1e-10 added to each distance",
-    "0 to 1",
+    "Between: 0 to 0.25; within: 0.75 to 1; endpoint colours outside limits",
     paste0(
       format(
         min(
@@ -1149,11 +1159,11 @@ figure6a_plot_settings <- data.frame(
       )
     ),
     "viridis magma",
-    "0.04",
+    "Relative fractions: 0.01; absolute variance: colour-range width / 25",
     "0",
     "Left-closed",
-    "0 to 1",
-    "0, 0.2, 0.4, 0.6, 0.8 and 1",
+    "Between: 0 to 0.25; within: 0.75 to 1; display cropped only; full data retained",
+    "Between: 0, 0.05, ..., 0.25; within: 0.75, 0.80, ..., 1; variance: scale-specific",
     "0.8",
     "1 to 10",
     "10, 50, 100 and 200",

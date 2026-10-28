@@ -1,0 +1,7 @@
+"analysis","country","target","model","averaging","n_evaluations","n_distinct_units","n_draws","RMSE_pp","MAE_pp","bias_pp","mean_95_width_pp","median_95_width_pp"
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",32,32,1,12.3862220812529,9.1009365424578,-2.39764678759967,45.3791919118623,43.4751221937717
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",11,11,1,6.1570611413683,5.07433093793703,-0.361523504460245,31.974868828498,28.5351558442877
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",695,695,1,25.7768374175396,20.6009990058772,-0.766152196191682,87.3137870897949,88.0952380952381
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",27,27,1,14.4061740483312,11.3920080750421,3.10882165115874,60.77684843771,59.7572138634282
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",18,18,1,14.9730568959271,12.3870498663391,-0.932863843868727,52.0561083216676,53.072951785346
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",210,210,1,27.0410113486454,21.7209441400156,0.488659138841069,88.5617991735085,89.2857142857143

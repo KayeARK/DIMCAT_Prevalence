@@ -19,6 +19,9 @@
 *.docx
 *.doc
 
+# Generated model projections
+Projections_model_*.csv
+
 # Results and outputs
 Results/
 results/
@@ -88,3 +91,6 @@ Data/ContAtlas_v2/
 Data/ContAtlas_v3/Bovine data/AAT_PR_bovine_BCT-HCT_data_table_full.xls
 Data/ContAtlas_v3/Bovine data/AT_PREV_bovine_PCR_Table_full.xls
 Data/EthiopiaAtlas.xls
+# Generated model diagnostics
+Diagnostics_ETH/
+Diagnostics_NGA/

@@ -1,0 +1,4 @@
+"model","completed_fold_draws","mean_fold_log_score_per_site","mean_fold_rmse","mean_fold_predictive_80pct_coverage","mean_fold_predictive_95pct_coverage","mean_fold_95pct_interval_fraction_width"
+"constant_binomial",5,-28.003248551552,0.249688758484926,0.212048930870532,0.319977735001843,0.23710396282042
+"intercept_spatial_iid",5,-4.13601984010939,0.249625999650286,0.824483671714144,0.951869150318523,0.85929228505997
+"selected_spatial_iid",5,-4.24107700090017,0.270692798270645,0.812891165859343,0.944726293175666,0.876271562349608

@@ -1,0 +1,2 @@
+"country","aggregation_km","withholding_km","buffer_km","min_sites_per_cell","reused_200km_folds","covariate_degree"
+"NGA",100,200,25,3,TRUE,2

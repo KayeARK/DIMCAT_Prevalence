@@ -1,816 +1,918 @@
-rm(list=ls())
+# AAT Ethiopia diagnostics: current metric-mesh / quadratic / IID workflow
+# Updated to the current grouped-quadratic + location-IID production workflow.
+#
+# This diagnostic deliberately reuses the production spatial_preparation.rds.
+# Therefore it uses the exact projected-metre mesh, SPDE, country mask,
+# observation-only covariate scaling, quadratic basis and prediction grid from
+# the current model, rather than recreating the old degree-based mesh.
+#
+# The current model engine is loaded for helper functions WITHOUT running its
+# final run_aat_quick(settings) call.
+#
+# Main outputs:
+#   Diagnostics.csv          pooled current-model diagnostic surfaces
+#   Model_comparison.csv     spatial+IID vs no-spatial+IID WAIC by draw
+#   Per_draw_summary.csv     simple draw-level summaries
+# Checkpoints_latest_workflow/ allows safe resume after interruption.
 
-library(readxl)
-library(ggplot2)
-library(INLA)
-library(sp)
-library(sf)
-library(afrilearndata)
-library(concaveman)
-library(geodata)
-library(raster)
-library(FNN)
+diagnostic_settings <- list(
+  data_path = "Code/TestSensSpec/adjusted_cases_all_sites.csv",
 
-n_iterations <- 50
+  # Blank = auto-find the model script. Otherwise paste the exact current file.
+  model_script = "",
 
-waic_gp    <- rep(NA, n_iterations)
-waic_nogp  <- rep(NA, n_iterations)
+  # Blank = index ALL compatible current-workflow production folders beside
+  # the model script.  Otherwise restrict diagnostics to one exact run folder.
+  production_run_dir = "",
 
-dic_gp     <- rep(NA, n_iterations)
-dic_nogp   <- rep(NA, n_iterations)
+  # NULL = automatically use the first 20 available compatible current-workflow draws.
+  # Or supply explicit model draw numbers, e.g. 83:102.
+  draw_ids = NULL,
+  n_draws = 50L,
 
-diagnostics_initialised <- FALSE
+  # NULL = use production prediction_manifest.rds (normally 4096).
+  posterior_samples = NULL,
 
-countries_to_infer=c("Ethiopia")
+  output_dir = "Code/Prevalence/Bovine BCT and PCR/Diagnostics ETH",
+  seed = 20260928L,
+  integration_tolerance = 1e-4,
+  prediction_chunk_size = 128L,
+  resume = TRUE
+)
 
-#add string to the name of the file
+country_code <- "ETH"
 
-data_path <- paste0("Code/TestSensSpec/adjusted_cases_all_sites.csv")
-data_original <- read.csv(data_path)
+suppressPackageStartupMessages({
+  library(INLA)
+  library(Matrix)
+  library(matrixStats)
+  library(sf)
+})
 
-# Ensure coordinates are numeric and clean from the start
-data_original$longitude <- as.numeric(data_original$longitude)
-data_original$latitude <- as.numeric(data_original$latitude)
-
-# Remove any rows with NA coordinates before aggregation
-na_coords <- is.na(data_original$longitude) | is.na(data_original$latitude)
-if(sum(na_coords) > 0) {
-  cat("Removing", sum(na_coords), "rows with NA coordinates from original data\n")
-  data_original <- data_original[!na_coords, ]
+atomic_save_rds_diag <- function(object, path) {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  tmp <- tempfile(pattern = ".writing_", tmpdir = dirname(path))
+  on.exit(unlink(tmp), add = TRUE)
+  saveRDS(object, tmp, compress = FALSE)
+  if (!file.rename(tmp, path)) stop("Could not commit checkpoint: ", path)
+  invisible(path)
 }
 
-# Create coordinate mapping for aggregation (done once)
-cat("Creating coordinate aggregation mapping...\n")
-cat("Original data has", nrow(data_original), "records\n")
-
-# Use base R aggregate to avoid type conversion issues
-coord_sample_mapping <- aggregate(
-  sample_size ~ longitude + latitude, 
-  data = data_original, 
-  FUN = sum, 
-  na.rm = TRUE
-)
-
-cat("After coordinate aggregation:", nrow(coord_sample_mapping), "unique locations\n")
-cat("Reduced from", nrow(data_original), "to", nrow(coord_sample_mapping), "records\n")
-
-#i should go from 8 to 1007
-
-for (iteration in (1+7):(1+7+n_iterations-1)){
-print(iteration-7)
-
-# Extract positive cases from original data for this iteration
-positive_orig <- data_original[,iteration]
-
-# Aggregate positive cases for this iteration by coordinates
-positive_aggregated <- aggregate(
-  positive_orig ~ longitude + latitude, 
-  data = data.frame(
-    longitude = data_original$longitude,
-    latitude = data_original$latitude,
-    positive_orig = positive_orig
-  ), 
-  FUN = sum, 
-  na.rm = TRUE
-)
-
-# Use aggregated data for this iteration
-positive <- positive_aggregated$positive_orig
-sample_size <- coord_sample_mapping$sample_size
-
-# Create data object with aggregated coordinates
-data <- data.frame(
-  longitude = as.numeric(coord_sample_mapping$longitude),
-  latitude = as.numeric(coord_sample_mapping$latitude),
-  stringsAsFactors = FALSE
-)
-#add elevation data
-
-
-#ELEVATION
-r_elv <- elevation_30s(country = "ETH", path = "Data/Covariates")
-data$elevation<-terra::extract(r_elv, data[, c("longitude", "latitude")])$ETH_elv_msk
-
-#PRECIPITATION
-r_prec<- worldclim_country(country = "ETH",path = "Data/Covariates", var = "prec")
-data$precipitation<-(terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_1+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_2+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_3+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_4+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_5+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_6+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_7+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_8+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_9+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_10+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_11+
-terra::extract(r_prec, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_prec_12)/12
-
-
-#AVERAGE TEMPERATURE
-r_tavg<- worldclim_country(country = "ETH",path = "Data/Covariates", var = "tavg")
-data$tavg<-(terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_1+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_2+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_3+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_4+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_5+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_6+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_7+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_8+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_9+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_10+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_11+
-terra::extract(r_tavg, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tavg_12)/12
-
-#MINIMUM TEMPERATURE
-r_tmin<- worldclim_country(country = "ETH",path = "Data/Covariates", var = "tmin")
-data$tmin<-(terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_1+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_2+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_3+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_4+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_5+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_6+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_7+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_8+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_9+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_10+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_11+
-terra::extract(r_tmin, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmin_12)/12
-
-#MAXIMUM TEMPERATURE
-r_tmax<- worldclim_country(country = "ETH",path = "Data/Covariates", var = "tmax")
-data$tmax<-(terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_1+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_2+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_3+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_4+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_5+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_6+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_7+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_8+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_9+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_10+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_11+
-terra::extract(r_tmax, data[, c("longitude", "latitude")])$ETH_wc2.1_30s_tmax_12)/12
-
-#POPULATION DENSITY
-r_pop_den <- population(year=2010, res=0.5, path="Data/Covariates")
-data$pop_den <-terra::extract(r_pop_den, data[, c("longitude", "latitude")])$population_density
-
-#LANDCOVER
-r_tree <- landcover("trees",path="Data/Covariates")
-data$tree <- terra::extract(r_tree, data[, c("longitude", "latitude")])$trees
-
-r_grassland <- landcover("grassland",path="Data/Covariates")
-data$grassland <- terra::extract(r_grassland, data[, c("longitude", "latitude")])$grassland
-
-r_shrub <- landcover("shrubs",path="Data/Covariates")
-data$shrub <- terra::extract(r_shrub, data[, c("longitude", "latitude")])$shrub
-
-r_cropland <- landcover("cropland",path="Data/Covariates")
-data$cropland <- terra::extract(r_cropland, data[, c("longitude", "latitude")])$cropland
-
-r_built <- landcover("built",path="Data/Covariates")
-data$built <- terra::extract(r_built, data[, c("longitude", "latitude")])$built
-
-r_bare <- landcover("bare",path="Data/Covariates")
-data$bare <- terra::extract(r_bare, data[, c("longitude", "latitude")])$bare
-
-r_water <- landcover("water",path="Data/Covariates")
-data$water <- terra::extract(r_water, data[, c("longitude", "latitude")])$water
-
-r_wetland <- landcover("wetland",path="Data/Covariates")
-data$wetland <- terra::extract(r_wetland, data[, c("longitude", "latitude")])$wetland
-
-r_mangrove <- landcover("mangroves",path="Data/Covariates")
-data$mangrove <- terra::extract(r_mangrove, data[, c("longitude", "latitude")])$mangroves
-
-r_moss <- landcover("moss",path="Data/Covariates")
-data$moss <- terra::extract(r_moss, data[, c("longitude", "latitude")])$moss
-
-data$tsetse_habitat <- data$tree + data$wetland
-
-#HUMAN FOOTPRINT
-r_human_fp<-footprint(year=2009, res=30, path="Data/Covariates")
-data$human_fp<-terra::extract(r_human_fp, data[, c("longitude", "latitude")])[,2]
-
-
-#CATTLE DATA
-r_cattle<-raster("Data/Covariates/livestock/cattle_2015/5_Ct_2015_Da.tif")
-data$cattle<-terra::extract(r_cattle, data[, c("longitude", "latitude")])
-data$cattle[is.na(data$cattle)] <- 0
-
-r_buffalo<-raster("Data/Covariates/livestock/buffalo_2015/5_Bf_2015_Da.tif")
-data$buffalo<-terra::extract(r_buffalo, data[, c("longitude", "latitude")])
-data$buffalo[is.na(data$buffalo)] <- 0
-
-r_goat<-raster("Data/Covariates/livestock/goats_2015/5_Gt_2015_Da.tif")
-data$goat<-terra::extract(r_goat, data[, c("longitude", "latitude")])
-data$goat[is.na(data$goat)] <- 0
-
-r_horse<-raster("Data/Covariates/livestock/horses_2015/5_Ho_2015_Da.tif")
-data$horse<-terra::extract(r_horse, data[, c("longitude", "latitude")])
-data$horse[is.na(data$horse)] <- 0
-
-r_pig<-raster("Data/Covariates/livestock/pigs_2015/5_Pg_2015_Da.tif")
-data$pig<-terra::extract(r_pig, data[, c("longitude", "latitude")])
-data$pig[is.na(data$pig)] <- 0
-
-r_sheep<-raster("Data/Covariates/livestock/sheep_2015/5_Sh_2015_Da.tif")
-data$sheep<-terra::extract(r_sheep, data[, c("longitude", "latitude")])
-data$sheep[is.na(data$sheep)] <- 0
-
-tsetse<-raster("Data/Covariates/tsenumbspec")
-tsetse[tsetse > 1] <- 1
-data$tsetse <-terra::extract(tsetse, data[, c("longitude", "latitude")])
-
-data$total_animal<-data$cattle+data$buffalo+data$goat+data$horse+data$pig+data$sheep
-
-
-latitudes<-data$latitude
-longitudes<-data$longitude
-elevations<-data$elevation
-precipitations<-data$precipitation
-tavgs<-data$tavg
-tmins<-data$tmin
-tmaxs<-data$tmax
-human_fps<-data$human_fp
-pop_dens<-data$pop_den
-
-trees<-data$tree
-grasslands<-data$grassland
-shrubs<-data$shrub
-croplands<-data$cropland
-builts<-data$built
-bares<-data$bare
-waters<-data$water
-wetlands<-data$wetland
-mangroves<-data$mangrove
-mosses<-data$moss
-tsetse_habitats<-data$tsetse_habitat
-
-cattles<-data$cattle
-buffalos<-data$buffalo
-goats<-data$goat
-horses<-data$horse
-pigs<-data$pig
-sheeps<-data$sheep
-total_animals<-data$total_animal
-tsetses<-data$tsetse
-
-
-countries_to_infer <- sort(countries_to_infer)
-
-#if Africa is in this list then perform the calculations for the whole continent
-if("Africa" %in% countries_to_infer){
-  border <- st_coordinates(st_geometry(africontinent))
-
-#remove Madagascar
-  border <- border[!(border[,1] > 40 & border[,1] < 60 & border[,2] > -30 & border[,2] < -10),]
-  border <- border[,1:2]
-  #remove Madagascar from africountries
-  africountries <- africountries[!(africountries$name=="Madagascar"),]
-  country <- africountries
-} else{
-v=africountries$name %in% countries_to_infer
-country <- africountries[which(v==TRUE),]
-
+atomic_write_csv_diag <- function(object, path) {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  tmp <- tempfile(pattern = ".writing_", tmpdir = dirname(path))
+  on.exit(unlink(tmp), add = TRUE)
+  write.csv(object, tmp, row.names = FALSE)
+  if (!file.rename(tmp, path)) stop("Could not commit CSV: ", path)
+  invisible(path)
 }
 
-#remove all countries except the ones in countries_to_infer
-africountries_toplot <- africountries[which(africountries$name %in% countries_to_infer),]
-
-country <- st_coordinates(st_geometry(country))
-
-poly.df <- data.frame("long"=country[,1],"lat"=country[,2])
-poly.sf <- st_as_sf(poly.df, coords = c("long","lat"))
-poly <- concaveman(poly.sf, length_threshold = 0,concavity=1.1)
-point.df <- data.frame("long"=longitudes,"lat"=latitudes)
-point.sf <- st_as_sf(point.df, coords = c("long","lat"))
-long_lat_concave <- st_coordinates(st_geometry(poly))
-border <- long_lat_concave
-
-inside <- st_intersects(point.sf,poly)
-inside <- inside[]==1
-
-latitudes <- latitudes[inside]
-longitudes <- longitudes[inside]
-sample_size <- sample_size[inside]
-positive <- positive[inside]
-elevations <- elevations[inside]
-precipitations <- precipitations[inside]
-tavgs <- tavgs[inside]
-tmins <- tmins[inside]
-tmaxs <- tmaxs[inside]
-human_fps <- human_fps[inside]
-pop_dens <- pop_dens[inside]
-trees <- trees[inside]
-grasslands <- grasslands[inside]
-shrubs <- shrubs[inside]
-croplands <- croplands[inside]
-builts <- builts[inside]
-bares <- bares[inside]
-waters <- waters[inside]
-wetlands <- wetlands[inside]
-mangroves <- mangroves[inside]
-mosses <- mosses[inside]
-tsetse_habitats <- tsetse_habitats[inside]
-cattles <- cattles[inside]
-buffalos <- buffalos[inside]
-goats <- goats[inside]
-horses <- horses[inside]
-pigs <- pigs[inside]
-sheeps <- sheeps[inside]
-total_animals <- total_animals[inside]
-tsetses <- tsetses[inside]
-
-#remove NA values
-ind <- !is.na(latitudes)
-latitudes <- latitudes[ind]
-longitudes <- longitudes[ind]
-sample_size <- sample_size[ind]
-positive <- positive[ind]
-elevations <- elevations[ind]
-precipitations <- precipitations[ind]
-tavgs <- tavgs[ind]
-tmins <- tmins[ind]
-tmaxs <- tmaxs[ind]
-human_fps <- human_fps[ind]
-pop_dens <- pop_dens[ind]
-trees <- trees[ind]
-grasslands <- grasslands[ind]
-shrubs <- shrubs[ind]
-croplands <- croplands[ind]
-builts <- builts[ind]
-bares <- bares[ind]
-waters <- waters[ind]
-wetlands <- wetlands[ind]
-mangroves <- mangroves[ind]
-mosses <- mosses[ind]
-tsetse_habitats <- tsetse_habitats[ind]
-cattles <- cattles[ind]
-buffalos <- buffalos[ind]
-goats <- goats[ind]
-horses <- horses[ind]
-pigs <- pigs[ind]
-sheeps <- sheeps[ind]
-total_animals <- total_animals[ind]
-tsetses <- tsetses[ind]
-
-prevalence <- positive/sample_size
-
-# pdf("Code/AbsencePresence/Bovine BCT/Results/DataPlot_AT_temp.pdf")
-# #plot africountries from afrilearndata
-# plot(africountries$geometry, border="black", col="white")
-# points(longitudes, latitudes, pch=19, col=ifelse(presence == 1, "red", "black"), cex=0.5)
-# #increase the y limit
-# legend("bottomleft", legend=c("Present","Absent"), fill=rev(c("black","red")))
-# dev.off()
-
-# put latitude and longitude next to each other
-coo <- cbind(longitudes, latitudes)
-
-# Reasonable mesh size - reduces vertices from ~8000 to ~800-1500
-mesh <- inla.mesh.2d(
-  loc = coo, 
-  offset = c(30, 60),        # Slightly reduced offset
-  cutoff = 3,                # Increased from 1 (reasonable middle ground)
-  max.edge = c(6, 15)        # Increased from c(3, 10) 
-)
-
-# Informative priors to prevent spatial overfitting
-spde <- inla.spde2.pcmatern(
-  mesh = mesh, 
-  alpha = 2, 
-  prior.range = c(50, 0.1),    # 50km range, 10% prob range < 50km
-  prior.sigma = c(1, 0.1),     # Moderate spatial variance
-  constr = TRUE
-)
-
-indexs <- inla.spde.make.index("s", spde$n.spde)
-
-A <- inla.spde.make.A(mesh = mesh, loc = coo)
-
-bb <- bbox(border)
-x <- seq(bb[1, "min"] - 1, bb[1, "max"] + 1, length.out = 200)
-y <- seq(bb[2, "min"] - 1, bb[2, "max"] + 1, length.out = 200)
-coop <- as.matrix(expand.grid(x, y))
-
-ind <- point.in.polygon(
-  coop[, 1], coop[, 2],
-  border[, 1], border[, 2]
-)
-coop <- coop[which(ind == 1), ]
-
-ra_elv <- aggregate(r_elv, fact = 5, fun = mean)
-dp <- terra::crds(ra_elv)
-dp <- as.data.frame(coop)
-
-#coop <- terra::crds(ra)
-dp$elevation <- terra::extract(ra_elv, coop)[, 1]
-dp$precipitation <- rowSums(terra::extract(r_prec, coop)[, 1:12])/12
-dp$tavg <- rowSums(terra::extract(r_tavg, coop)[, 1:12])/12
-dp$tmin <- rowSums(terra::extract(r_tmin, coop)[, 1:12])/12
-dp$tmax <- rowSums(terra::extract(r_tmax, coop)[, 1:12])/12
-dp$human_fp <- terra::extract(r_human_fp, coop)[, 1]
-dp$pop_den <- terra::extract(r_pop_den, coop)[, 1]
-dp$tree <- terra::extract(r_tree, coop)[, 1]
-dp$grassland <- terra::extract(r_grassland, coop)[, 1]
-dp$shrub <- terra::extract(r_shrub, coop)[, 1]
-dp$cropland <- terra::extract(r_cropland, coop)[, 1]
-dp$built <- terra::extract(r_built, coop)[, 1]
-dp$bare <- terra::extract(r_bare, coop)[, 1]
-dp$water <- terra::extract(r_water, coop)[, 1]
-dp$wetland <- terra::extract(r_wetland, coop)[, 1]
-dp$mangrove <- terra::extract(r_mangrove, coop)[, 1]
-dp$moss <- terra::extract(r_moss, coop)[, 1]
-dp$tsetse_habitat <- dp$tree + dp$wetland
-dp$cattle <- terra::extract(r_cattle, coop)
-dp$cattle[is.na(dp$cattle)] <- 0
-dp$buffalo <- terra::extract(r_buffalo, coop)
-dp$buffalo[is.na(dp$buffalo)] <- 0
-dp$goat <- terra::extract(r_goat, coop)
-dp$goat[is.na(dp$goat)] <- 0
-dp$horse <- terra::extract(r_horse, coop)
-dp$horse[is.na(dp$horse)] <- 0
-dp$pig <- terra::extract(r_pig, coop)
-dp$pig[is.na(dp$pig)] <- 0
-dp$sheep <- terra::extract(r_sheep, coop)
-dp$sheep[is.na(dp$sheep)] <- 0
-dp$total_animal <- dp$cattle + dp$buffalo + dp$goat + dp$horse + dp$pig + dp$sheep
-dp$tsetse <- terra::extract(tsetse, coop)
-
-Ap <- inla.spde.make.A(mesh = mesh, loc = coop)
-
-# stack for estimation stk.e
-stk.e <- inla.stack(
-  tag = "est",
-  data = list(y = positive, numtrials = sample_size),
-  A = list(1, A),
-  effects = list(data.frame(b0 = rep(1, nrow(coo)), elevation=elevations,
-  precipitation=precipitations, tavg=tavgs, tmin=tmins, tmax=tmaxs,
-  human_fp=human_fps, pop_den=pop_dens, tree=trees, grassland=grasslands,
-  shrub=shrubs, cropland=croplands, built=builts, bare=bares, water=waters, wetland=wetlands,
-  mangrove=mangroves, moss=mosses, tsetse_habitat=tsetse_habitats, cattle=cattles, goat=goats,
-  horse=horses, pig=pigs, buffalo=buffalos, sheep=sheeps, total_animal=total_animals, tsetse=tsetses), s = indexs)
-)
-
-
-# stack for prediction stk.p
-stk.p <- inla.stack(
-  tag = "pred",
-  data = list(y = NA, numtrials = NA),
-  A = list(1, Ap),
-  effects = list(data.frame(b0 = rep(1, nrow(coop)),elevation=dp$elevation,
-  precipitation=dp$precipitation, tavg=dp$tavg, tmin=dp$tmin, tmax=dp$tmax,
-  human_fp=dp$human_fp, pop_den=dp$pop_den, tree=dp$tree, grassland=dp$grassland,
-  shrub=dp$shrub, cropland=dp$cropland, built=dp$built, bare=dp$bare, water=dp$water, 
-  wetland=dp$wetland, mangrove=dp$mangrove, moss=dp$moss, tsetse_habitat=dp$tsetse_habitat, cattle=dp$cattle,
-  goat=dp$goat, horse=dp$horse, pig=dp$pig, buffalo=dp$buffalo, sheep=dp$sheep,
-   total_animal=dp$total_animal, tsetse=dp$tsetse), s = indexs)
-)
-
-# stk.full has stk.e and stk.p
-stk.full <- inla.stack(stk.e, stk.p)
-
-cov_file <- paste0("Code/Prevalence/Bovine BCT and PCR/Covariates_ETH/","Covariates_model_", iteration-7, ".csv")
-covariates <- read.csv(cov_file)$covariates
-
-formula <- as.formula(paste0("y ~ 0 + b0 +",paste(covariates, collapse = " + "),"+ f(s, model = spde)"))
-
-res <- inla(formula,
-  data = inla.stack.data(stk.full),
-  family = "binomial", Ntrials = numtrials,
-  control.compute=list(return.marginals.predictor=TRUE, dic=TRUE, waic=TRUE),
-  control.predictor = list(link=1,compute = TRUE,
-  A = inla.stack.A(stk.full)),)
-
-
-  #### DIAGNOSTICS ####
-
-  ############################################################
-################ INITIALISE STORAGE ########################
-############################################################
-
-if(!diagnostics_initialised){
-
-  n_pred <- nrow(coop)
-
-  sum_prev_mean <- rep(0, n_pred)
-  sum_prev_var  <- rep(0, n_pred)
-
-  sum_eta_mean <- rep(0, n_pred)
-  sum_eta_var  <- rep(0, n_pred)
-
-  sum_spatial_mean <- rep(0, n_pred)
-  sum_spatial_var  <- rep(0, n_pred)
-
-  sum_nogp <- rep(0, n_pred)
-
-  ##########################################################
-  ################ DISTANCE TO DATA ########################
-  ##########################################################
-
-  dist_to_data <- get.knnx(
-    coo,
-    coop,
-    k = 1
-  )$nn.dist[,1]
-
-  diagnostics_initialised <- TRUE
+diagnostic_script_directory <- function() {
+  ofiles <- lapply(sys.frames(), function(x) x$ofile)
+  ofiles <- Filter(function(x) is.character(x) && length(x) == 1L && nzchar(x), ofiles)
+  if (length(ofiles))
+    return(dirname(normalizePath(tail(ofiles, 1)[[1]], mustWork = TRUE)))
+  arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+  if (length(arg))
+    return(dirname(normalizePath(sub("^--file=", "", arg[1]), mustWork = TRUE)))
+  getwd()
 }
 
-############################################################
-################ PREDICTION INDEX ##########################
-############################################################
+find_model_script <- function(explicit, cc) {
+  if (nzchar(explicit))
+    return(normalizePath(path.expand(explicit), mustWork = TRUE))
 
-index <- inla.stack.index(
-  stk.full,
-  tag = "pred"
-)$data
+  # VS Code/R terminals commonly keep the project root as getwd() even when
+  # this diagnostic script and the production model script live elsewhere.
+  # Search both locations.  The regex also accepts downloaded names such as
+  # AAT_spatial_quick_joint_posterior_NGA(3).R.
+  roots <- unique(normalizePath(
+    c(getwd(), diagnostic_script_directory()),
+    mustWork = TRUE
+  ))
+  pattern <- paste0("^AAT_spatial_quick_joint_posterior_", cc, ".*[.]R$")
+  fs <- unique(unlist(lapply(roots, function(root)
+    list.files(root, pattern = pattern, full.names = TRUE, ignore.case = TRUE))))
 
-############################################################
-################ PREVALENCE DIAGNOSTICS ####################
-############################################################
+  if (!length(fs))
+    stop(
+      "Cannot find the current ", cc, " model script in either:\n  ",
+      paste(roots, collapse = "\n  "),
+      "\nSet diagnostic_settings$model_script to its full path if it is stored elsewhere."
+    )
 
-pred_mean <- res$summary.fitted.values[
-  index,
-  "mean"
-]
+  # Prefer the canonical unsuffixed name when present; otherwise use the newest
+  # country-specific matching file.
+  canonical <- fs[tolower(basename(fs)) ==
+                    tolower(paste0("AAT_spatial_quick_joint_posterior_", cc, ".R"))]
+  if (length(canonical))
+    return(normalizePath(canonical[1], mustWork = TRUE))
 
-pred_sd <- res$summary.fitted.values[
-  index,
-  "sd"
-]
+  fs <- fs[order(file.info(fs)$mtime, decreasing = TRUE)]
+  normalizePath(fs[1], mustWork = TRUE)
+}
 
-sum_prev_mean <- sum_prev_mean + pred_mean
+load_model_helpers_without_running <- function(path) {
+  x <- readLines(path, warn = FALSE)
+  keep <- !grepl("^\\s*run_aat_quick\\s*\\(\\s*settings\\s*\\)\\s*$", x)
+  if (sum(!keep) != 1L)
+    stop("Expected exactly one final run_aat_quick(settings) line in ", path,
+         ". Refusing to source an ambiguous model script.")
+  tmp <- tempfile(fileext = ".R")
+  on.exit(unlink(tmp), add = TRUE)
+  writeLines(x[keep], tmp)
+  sys.source(tmp, envir = .GlobalEnv)
+  invisible(TRUE)
+}
 
-sum_prev_var <- sum_prev_var + pred_sd^2
+discover_production_runs <- function(base, explicit, cc) {
+  roots <- if (nzchar(explicit)) {
+    normalizePath(path.expand(explicit), mustWork = TRUE)
+  } else {
+    x <- list.dirs(path.expand(base), recursive = FALSE, full.names = TRUE)
+    x[grepl(paste0("^Spatial_joint_", cc), basename(x))]
+  }
 
-############################################################
-################ LATENT LINEAR PREDICTOR ###################
-############################################################
+  if (!length(roots))
+    stop("No Spatial_joint_", cc, " production folders were found under: ", base)
 
-eta_mean <- res$summary.linear.predictor[
-  index,
-  "mean"
-]
+  rows <- lapply(roots, function(root) {
+    manifest_file <- file.path(root, "run_manifest.rds")
+    prep_file <- file.path(root, paste0("Checkpoints_", cc), "spatial_preparation.rds")
+    cov_dir <- file.path(root, paste0("Covariates_", cc))
+    if (!file.exists(manifest_file) || !file.exists(prep_file) || !dir.exists(cov_dir))
+      return(NULL)
 
-eta_sd <- res$summary.linear.predictor[
-  index,
-  "sd"
-]
+    man <- tryCatch(readRDS(manifest_file), error = function(e) NULL)
+    if (is.null(man) ||
+        !identical(as.integer(man$covariate_degree), 2L) ||
+        !isTRUE(man$use_location_iid) ||
+        is.null(man$workflow_version) ||
+        !grepl("grouped_quadratic", man$workflow_version))
+      return(NULL)
 
-sum_eta_mean <- sum_eta_mean + eta_mean
+    fs <- list.files(cov_dir,
+      pattern = "^Covariates_model_[0-9]+[.]csv$", full.names = TRUE)
+    if (!length(fs)) return(NULL)
+    ids <- suppressWarnings(as.integer(sub(
+      "^Covariates_model_([0-9]+)[.]csv$", "\\1", basename(fs))))
+    ok <- is.finite(ids)
+    if (!any(ok)) return(NULL)
 
-sum_eta_var <- sum_eta_var + eta_sd^2
+    data.frame(
+      draw = ids[ok],
+      cov_file = normalizePath(fs[ok], mustWork = TRUE),
+      root = normalizePath(root, mustWork = TRUE),
+      manifest_file = normalizePath(manifest_file, mustWork = TRUE),
+      prep_file = normalizePath(prep_file, mustWork = TRUE),
+      mtime = as.numeric(file.info(manifest_file)$mtime),
+      stringsAsFactors = FALSE
+    )
+  })
+  rows <- Filter(Negate(is.null), rows)
+  if (!length(rows))
+    stop("Spatial_joint_", cc,
+         " folders exist, but none is a compatible grouped-quadratic + IID production run with covariate files.")
 
-############################################################
-################ SPATIAL FIELD #############################
-############################################################
+  idx <- do.call(rbind, rows)
 
-spatial_mean <- as.vector(
-  Ap %*%
-  res$summary.random$s$mean
-)
+  # A draw can occur in more than one continuation folder.  Accept duplicates
+  # only when their selected-covariate files are byte-identical; then use the
+  # newest compatible copy.  A conflict is scientifically ambiguous and stops.
+  out <- lapply(split(idx, idx$draw), function(z) {
+    if (nrow(z) > 1L) {
+      h <- unname(tools::md5sum(z$cov_file))
+      if (length(unique(h)) != 1L)
+        stop("Conflicting selected-covariate files found for model draw ", z$draw[1],
+             " across: ", paste(z$root, collapse = "; "))
+      z <- z[order(z$mtime, decreasing = TRUE), , drop = FALSE]
+    }
+    z[1, , drop = FALSE]
+  })
+  idx <- do.call(rbind, out)
+  idx <- idx[order(idx$draw), , drop = FALSE]
+  rownames(idx) <- NULL
+  idx
+}
 
-spatial_sd <- sqrt(
-  as.vector(
-    (Ap^2) %*%
-    (res$summary.random$s$sd^2)
+choose_diagnostic_draws <- function(cfg, index) {
+  if (is.null(cfg$draw_ids)) {
+    n <- as.integer(cfg$n_draws)
+    if (length(n) != 1L || is.na(n) || n < 1L || n != cfg$n_draws)
+      stop("n_draws must be one positive integer when draw_ids = NULL.")
+    if (nrow(index) < n)
+      stop("Only ", nrow(index), " compatible current-workflow draws are available; requested ", n, ".")
+    return(index$draw[seq_len(n)])
+  }
+  x <- as.integer(cfg$draw_ids)
+  if (!length(x) || anyNA(x) || any(x < 1L) || anyDuplicated(x))
+    stop("draw_ids must be distinct positive model-draw numbers, or NULL.")
+  missing <- setdiff(x, index$draw)
+  if (length(missing))
+    stop("Requested current-workflow draw(s) not found in compatible production folders: ",
+         paste(missing, collapse = ", "),
+         ". Available range is ", min(index$draw), "-", max(index$draw), ".")
+  x
+}
+
+assert_production_preparations_compatible <- function(reference_root, roots, cc) {
+  roots <- unique(normalizePath(roots, mustWork = TRUE))
+  ref_m <- readRDS(file.path(reference_root, "run_manifest.rds"))
+  ref_p <- readRDS(file.path(reference_root, paste0("Checkpoints_", cc), "spatial_preparation.rds"))
+
+  manifest_fields <- c(
+    "input_md5", "country", "input_filter", "elevation_policy", "spatial_crs",
+    "cutoff_m", "max_edge_m", "offset_m", "range_prior_m", "sigma_prior",
+    "coefficient_prior_sd", "intercept_prior_sd", "covariate_degree",
+    "use_location_iid", "iid_prior", "control_inla"
   )
-)
-
-sum_spatial_mean <-
-  sum_spatial_mean + spatial_mean
-
-sum_spatial_var <-
-  sum_spatial_var + spatial_sd^2
-
-############################################################
-################ NO-SPATIAL MODEL ##########################
-############################################################
-
-formula_nogp <- as.formula(
-  paste0(
-    "y ~ 0 + b0 + ",
-    paste(covariates, collapse = " + ")
+  prep_fields <- c(
+    "candidate_covariates", "use_location_iid", "numtrials", "kept_location_rows",
+    "observation_lonlat", "prediction_lonlat", "observation_m", "prediction_m",
+    "covariate_audit", "quadratic_basis", "coordinate_mapping"
   )
-)
 
-res_nogp <- inla(
+  for (root in setdiff(roots, reference_root)) {
+    m <- readRDS(file.path(root, "run_manifest.rds"))
+    p <- readRDS(file.path(root, paste0("Checkpoints_", cc), "spatial_preparation.rds"))
 
-  formula_nogp,
+    bad_m <- manifest_fields[!vapply(manifest_fields, function(nm)
+      identical(ref_m[[nm]], m[[nm]]), logical(1))]
+    bad_p <- prep_fields[!vapply(prep_fields, function(nm)
+      identical(ref_p[[nm]], p[[nm]]), logical(1))]
 
-  data = inla.stack.data(stk.full),
-
-  family = "binomial",
-
-  Ntrials = numtrials,
-
-  control.compute = list(
-    dic = TRUE,
-    waic = TRUE
-  ),
-
-  control.predictor = list(
-    link = 1,
-    compute = TRUE,
-    A = inla.stack.A(stk.full)
-  ),
-
-  verbose = FALSE,
-
-  inla.mode = "compact"
-)
-
-pred_nogp <- res_nogp$summary.fitted.values[
-  index,
-  "mean"
-]
-
-sum_nogp <- sum_nogp + pred_nogp
-
-waic_gp[iteration - 7]   <- res$waic$waic
-waic_nogp[iteration - 7] <- res_nogp$waic$waic
-
-dic_gp[iteration - 7]    <- res$dic$dic
-dic_nogp[iteration - 7]  <- res_nogp$dic$dic
-
-############################################################
-################ CLEAN MEMORY ##############################
-############################################################
-
-rm(
-  res_nogp,
-  pred_mean,
-  pred_sd,
-  eta_mean,
-  eta_sd,
-  spatial_mean,
-  spatial_sd,
-  pred_nogp
-)
-
-gc()
-
+    # The sparse projectors and SPDE object must also represent the same setup.
+    same_A <- identical(ref_p$A, p$A)
+    same_Ap <- identical(ref_p$Ap, p$Ap)
+    if (length(bad_m) || length(bad_p) || !same_A || !same_Ap) {
+      stop(
+        "Current-workflow production folders are not preparation-compatible.\nReference: ", reference_root,
+        "\nOther: ", root,
+        if (length(bad_m)) paste0("\nManifest differences: ", paste(bad_m, collapse = ", ")) else "",
+        if (length(bad_p)) paste0("\nPreparation differences: ", paste(bad_p, collapse = ", ")) else "",
+        if (!same_A) "\nA projector differs." else "",
+        if (!same_Ap) "\nAp projector differs." else ""
+      )
+    }
+  }
+  invisible(TRUE)
 }
 
-############################################################
-################ COMPUTE AVERAGES ##########################
-############################################################
+find_project_root_for_data <- function(model_base, relative_data_path) {
+  if (grepl("^/", path.expand(relative_data_path)))
+    return(dirname(normalizePath(path.expand(relative_data_path), mustWork = TRUE)))
+  p <- normalizePath(model_base, mustWork = TRUE)
+  repeat {
+    candidate <- file.path(p, relative_data_path)
+    if (file.exists(candidate)) return(p)
+    parent <- dirname(p)
+    if (identical(parent, p)) break
+    p <- parent
+  }
+  stop("Cannot locate ", relative_data_path,
+       " in any ancestor of the current model-script directory: ", model_base)
+}
 
-avg_prev_mean <- sum_prev_mean / n_iterations
+prepare_input_like_production <- function(d, cc) {
+  d$longitude <- suppressWarnings(as.numeric(as.character(d$longitude)))
+  d$latitude <- suppressWarnings(as.numeric(as.character(d$latitude)))
 
-avg_prev_sd <- sqrt(
-  sum_prev_var / n_iterations
-)
+  if (cc == "ETH") {
+    # Exact orientation/bounding-box logic used by the current ETH engine.
+    d <- filter_ethiopia_inputs(d)
+  } else {
+    keep <- is.finite(d$longitude) & is.finite(d$latitude)
+    if (any(!keep))
+      message("Removing ", sum(!keep), " rows with missing/non-finite coordinates.")
+    d <- d[keep, , drop = FALSE]
+    if (!nrow(d) ||
+        any(abs(d$longitude) > 180 | abs(d$latitude) > 90))
+      stop("No valid geographic coordinates remain.")
+  }
+  d
+}
 
-avg_eta_mean <- sum_eta_mean / n_iterations
+validate_production <- function(run_dir, cc, cfg) {
+  manifest_file <- file.path(run_dir, "run_manifest.rds")
+  prep_file <- file.path(run_dir, paste0("Checkpoints_", cc), "spatial_preparation.rds")
+  manifest <- readRDS(manifest_file)
+  prepared <- readRDS(prep_file)
 
-avg_eta_sd <- sqrt(
-  sum_eta_var / n_iterations
-)
+  if (!isTRUE(manifest$covariate_degree == 2L))
+    stop("Chosen production run is not quadratic.")
+  if (!isTRUE(manifest$use_location_iid) ||
+      !isTRUE(prepared$use_location_iid))
+    stop("Chosen production run does not use the location IID effect.")
+  if (is.null(prepared$quadratic_basis))
+    stop("Production preparation lacks quadratic_basis.")
+  if (is.null(prepared$raw_observation_covariates) ||
+      is.null(prepared$raw_prediction_covariates) ||
+      is.null(prepared$covariate_audit))
+    stop("Production preparation lacks current covariate scaling/audit objects.")
+  if (is.null(prepared$observation_m) ||
+      is.null(prepared$prediction_m) ||
+      is.null(prepared$A) || is.null(prepared$Ap) ||
+      is.null(prepared$spde))
+    stop("Production preparation lacks the current projected mesh/projectors.")
 
-avg_spatial_mean <- sum_spatial_mean / n_iterations
+  crs <- sf::st_crs(manifest$spatial_crs)
+  if (is.na(crs) || sf::st_is_longlat(crs))
+    stop("Chosen production run is not using a projected metric CRS; refusing old mesh.")
 
-avg_spatial_sd <- sqrt(
-  sum_spatial_var / n_iterations
-)
+  if (is.null(prepared$numtrials))
+    stop("Production preparation lacks explicit Ntrials.")
 
-############################################################
-################ FIXED EFFECT COMPONENT ####################
-############################################################
+  pred_manifest_file <- file.path(run_dir, "prediction_manifest.rds")
+  pred_manifest <- if (file.exists(pred_manifest_file))
+    readRDS(pred_manifest_file) else NULL
 
-fixed_effect_mean <- avg_eta_mean - avg_spatial_mean
+  # predict_joint() uses the production Monte Carlo screen threshold.
+  cfg$mc_screen_pp <- if (!is.null(pred_manifest$mc_screen_pp))
+    pred_manifest$mc_screen_pp else 3
 
-avg_nogp <- sum_nogp / n_iterations
+  if (is.null(cfg$posterior_samples)) {
+    cfg$posterior_samples <- if (!is.null(pred_manifest$posterior_samples))
+      as.integer(pred_manifest$posterior_samples) else 4096L
+  }
+  if (cfg$posterior_samples < 1024L ||
+      cfg$posterior_samples != as.integer(cfg$posterior_samples))
+    stop("posterior_samples must be an integer >= 1024.")
 
-############################################################
-################ SAVE DIAGNOSTICS ##########################
-############################################################
+  # fit_observations() expects these current-engine controls.
+  cfg$coefficient_prior_sd <- manifest$coefficient_prior_sd
+  cfg$intercept_prior_sd <- manifest$intercept_prior_sd
+  cfg$control_inla <- manifest$control_inla
+  cfg$inla_mode <- manifest$inla_mode
+  if (is.null(cfg$inla_mode) || !nzchar(cfg$inla_mode))
+    cfg$inla_mode <- INLA::inla.getOption("inla.mode")
 
-diagnostics <- data.frame(
+  cfg$local_work_root <- tempfile("aat_diag_inla_")
+  dir.create(cfg$local_work_root, recursive = TRUE, showWarnings = FALSE)
+  cfg$diagnostics_dir <- cfg$output_dir
+  cfg$runtime <- capture_inla_runtime()
 
-  lon = coop[,1],
-  lat = coop[,2],
+  list(
+    manifest = manifest,
+    prepared = prepared,
+    cfg = cfg,
+    manifest_md5 = unname(tools::md5sum(manifest_file)),
+    preparation_md5 = unname(tools::md5sum(prep_file))
+  )
+}
 
-  ##########################################################
-  ################ PREVALENCE ##############################
-  ##########################################################
+# Same selected fixed effects and same location IID, but no spatial Gaussian field.
+fit_nospatial_iid <- function(prepared, y, covariates, manifest, cfg) {
+  xo <- transform_model_covariates(prepared$raw_observation_covariates, prepared)
+  terms <- effect_terms(covariates, prepared)
+  n <- nrow(xo)
 
-  prevalence_mean = avg_prev_mean,
-  prevalence_sd   = avg_prev_sd,
+  dat <- data.frame(
+    y = as.numeric(y),
+    numtrials = as.numeric(prepared$numtrials),
+    b0 = rep(1, n),
+    xo[, terms, drop = FALSE],
+    check.names = FALSE
+  )
+  if (prepared$use_location_iid) dat$site_iid <- seq_len(n)
 
-  ##########################################################
-  ################ LATENT SCALE ############################
-  ##########################################################
+  iid_hyper <- list(prec = list(prior = "pc.prec", param = manifest$iid_prior))
+  rhs <- c("0", "b0", terms)
+  if (prepared$use_location_iid)
+    rhs <- c(rhs, "f(site_iid, model = 'iid', constr = FALSE, hyper = iid_hyper)")
+  formula <- as.formula(paste("y ~", paste(rhs, collapse = " + ")),
+                        env = environment())
 
-  eta_mean = avg_eta_mean,
-  eta_sd   = avg_eta_sd,
+  args <- list(
+    formula = formula,
+    data = dat,
+    family = "binomial",
+    Ntrials = dat$numtrials,
+    inla.mode = cfg$inla_mode,
+    num.threads = "1:1",
+    control.inla = cfg$control_inla,
+    control.fixed = fixed_prior_control(
+      manifest$coefficient_prior_sd,
+      manifest$intercept_prior_sd
+    ),
+    control.compute = list(
+      waic = TRUE, config = TRUE, dic = FALSE,
+      return.marginals.predictor = FALSE
+    ),
+    control.predictor = list(link = 1, compute = TRUE),
+    verbose = FALSE
+  )
+  res <- do.call(INLA::inla, args)
+  if (length(res$waic$waic) != 1L || !is.finite(res$waic$waic))
+    stop("No-spatial+IID model returned non-finite WAIC.")
+  res
+}
 
-  ##########################################################
-  ################ SPATIAL FIELD ###########################
-  ##########################################################
+sample_nospatial_iid <- function(res, prepared, covariates, cfg, draw) {
+  fixed_names <- c("b0", effect_terms(covariates, prepared))
+  selection <- setNames(rep(list(0L), length(fixed_names)), fixed_names)
+  seed <- as.integer((as.double(cfg$seed) + 2003 * draw) %% 2147483646 + 1L)
 
-  spatial_mean = avg_spatial_mean,
-  spatial_sd   = avg_spatial_sd,
+  set.seed(seed)
+  samples <- INLA::inla.posterior.sample(
+    cfg$posterior_samples, res, selection = selection,
+    intern = FALSE, use.improved.mean = TRUE,
+    add.names = FALSE, seed = seed, num.threads = 1L
+  )
+  labels <- rownames(samples[[1]]$latent)
+  if (is.null(labels)) labels <- names(samples[[1]]$latent)
+  if (is.null(labels) || anyDuplicated(labels))
+    stop("Missing/duplicate no-spatial posterior labels.")
 
-  ##########################################################
-  ################ NO GP ###################################
-  ##########################################################
+  b <- vapply(fixed_names, function(nm)
+    sample_component_rows(labels, nm, 1L), integer(1))
+  beta <- matrix(
+    vapply(samples, function(z) as.numeric(z$latent)[b],
+           numeric(length(b))),
+    nrow = length(b),
+    dimnames = list(fixed_names, NULL)
+  )
 
-  prevalence_no_gp = avg_nogp,
+  sigma <- rep(0, cfg$posterior_samples)
+  if (prepared$use_location_iid) {
+    hn <- rownames(samples[[1]]$hyperpar)
+    if (is.null(hn)) hn <- names(samples[[1]]$hyperpar)
+    j <- which(hn == "Precision for site_iid")
+    if (length(j) != 1L) stop("Cannot find sampled no-spatial IID precision.")
+    precision <- vapply(samples, function(z) as.numeric(z$hyperpar)[j], numeric(1))
+    if (any(!is.finite(precision) | precision <= 0))
+      stop("Invalid no-spatial IID precision samples.")
+    sigma <- 1 / sqrt(precision)
+  }
 
-  ##########################################################
-  ################ DATA COVERAGE ###########################
-  ##########################################################
+  rm(samples)
+  gc(verbose = FALSE)
+  list(beta = beta, sigma_iid = sigma, seed = seed)
+}
 
-  dist_to_data = dist_to_data
-)
+summarise_components <- function(prepared, covariates, joint, cfg) {
+  ncell <- nrow(prepared$prediction_lonlat)
+  support <- support_at_predictions(prepared, covariates)
+  valid <- support$valid_prediction
+  xp <- transform_model_covariates(prepared$raw_prediction_covariates, prepared)
+  fixed_terms <- effect_terms(covariates, prepared)
+  X <- cbind(b0 = 1, as.matrix(xp[, fixed_terms, drop = FALSE]))
+  if (!identical(colnames(X), rownames(joint$beta)))
+    stop("Prediction fixed-effect order mismatch.")
 
-# ############################################################
-# ################ SANITY CHECK ##############################
-# ############################################################
+  out <- list(
+    spatial_mean = rep(NA_real_, ncell),
+    spatial_var = rep(NA_real_, ncell),
+    fixed_mean = rep(NA_real_, ncell),
+    fixed_var = rep(NA_real_, ncell)
+  )
 
-# cat("\n")
-# cat("=====================================\n")
-# cat("FIXED EFFECTS VS SPATIAL FIELD\n")
-# cat("=====================================\n")
+  all_rows <- seq_len(ncell)
+  for (start in seq.int(1L, ncell, by = cfg$prediction_chunk_size)) {
+    rows <- all_rows[start:min(ncell, start + cfg$prediction_chunk_size - 1L)]
+    w <- as.matrix(prepared$Ap[rows, , drop = FALSE] %*% joint$spatial)
+    out$spatial_mean[rows] <- rowMeans(w)
+    out$spatial_var[rows] <- matrixStats::rowVars(w)
 
-# cat("\nSDs:\n")
+    ok <- rows[valid[rows]]
+    if (length(ok)) {
+      f <- X[ok, , drop = FALSE] %*% joint$beta
+      out$fixed_mean[ok] <- rowMeans(f)
+      out$fixed_var[ok] <- matrixStats::rowVars(f)
+    }
+  }
+  out
+}
 
-# cat(
-#   "SD(Xbeta) =",
-#   round(sd(fixed_effect_mean, na.rm = TRUE), 3),
-#   "\n"
-# )
+predict_nospatial_iid <- function(prepared, covariates, joint, cfg) {
+  ncell <- nrow(prepared$prediction_lonlat)
+  support <- support_at_predictions(prepared, covariates)
+  valid <- support$valid_prediction
+  xp <- transform_model_covariates(prepared$raw_prediction_covariates, prepared)
+  fixed_terms <- effect_terms(covariates, prepared)
+  X <- cbind(b0 = 1, as.matrix(xp[, fixed_terms, drop = FALSE]))
+  if (!identical(colnames(X), rownames(joint$beta)))
+    stop("No-spatial prediction fixed-effect order mismatch.")
 
-# cat(
-#   "SD(spatial field) =",
-#   round(sd(avg_spatial_mean, na.rm = TRUE), 3),
-#   "\n"
-# )
+  expected_mean <- expected_var <- surface_mean <- surface_var <-
+    rep(NA_real_, ncell)
 
-# cat("\nRanges:\n")
+  fun <- make_iid_integrator(joint$sigma_iid, cfg$integration_tolerance)
+  ok_all <- which(valid)
 
-# cat(
-#   "Range(Xbeta) = [",
-#   round(min(fixed_effect_mean, na.rm = TRUE), 3),
-#   ", ",
-#   round(max(fixed_effect_mean, na.rm = TRUE), 3),
-#   "]\n",
-#   sep = ""
-# )
+  for (start in seq.int(1L, length(ok_all), by = cfg$prediction_chunk_size)) {
+    rows <- ok_all[start:min(length(ok_all), start + cfg$prediction_chunk_size - 1L)]
+    eta <- X[rows, , drop = FALSE] %*% joint$beta
+    surface <- plogis(eta)
+    surface_mean[rows] <- rowMeans(surface)
+    surface_var[rows] <- matrixStats::rowVars(surface)
 
-# cat(
-#   "Range(spatial field) = [",
-#   round(min(avg_spatial_mean, na.rm = TRUE), 3),
-#   ", ",
-#   round(max(avg_spatial_mean, na.rm = TRUE), 3),
-#   "]\n",
-#   sep = ""
-# )
+    sigma <- rep(joint$sigma_iid, each = length(rows))
+    expected <- matrix(
+      fun$evaluate(as.numeric(eta), sigma),
+      nrow = length(rows)
+    )
+    expected_mean[rows] <- rowMeans(expected)
+    expected_var[rows] <- matrixStats::rowVars(expected)
+  }
 
-# cat("=====================================\n")
+  list(
+    expected_mean = expected_mean,
+    expected_var = expected_var,
+    surface_mean = surface_mean,
+    surface_var = surface_var,
+    iid_sd_mean = mean(joint$sigma_iid),
+    iid_sd_median = median(joint$sigma_iid),
+    integration_error = fun$error
+  )
+}
 
-# cat(
-#   "SD(spatial field) / SD(Xbeta) = ",
-#   round(
-#     sd(avg_spatial_mean, na.rm = TRUE) /
-#     sd(fixed_effect_mean, na.rm = TRUE),
-#     2
-#   ),
-#   "\n"
-# )
+pool_component <- function(results, mean_name, var_name) {
+  ncell <- length(results[[1]][[mean_name]])
+  count <- integer(ncell)
+  sm <- sv <- ss <- numeric(ncell)
 
-# cat("\n")
-# cat("=====================================\n")
-# cat("MODEL COMPARISON\n")
-# cat("=====================================\n")
+  for (z in results) {
+    m <- z[[mean_name]]
+    v <- z[[var_name]]
+    ok <- is.finite(m) & is.finite(v) & v >= 0
+    count[ok] <- count[ok] + 1L
+    sm[ok] <- sm[ok] + m[ok]
+    sv[ok] <- sv[ok] + v[ok]
+    ss[ok] <- ss[ok] + v[ok] + m[ok]^2
+  }
 
-# cat(
-#   "Mean Delta WAIC = ",
-#   round(
-#     mean(waic_nogp - waic_gp, na.rm = TRUE),
-#     2
-#   ),
-#   "\n"
-# )
+  mu <- within <- total <- between <- rep(NA_real_, ncell)
+  ok <- count > 0L
+  mu[ok] <- sm[ok] / count[ok]
+  within[ok] <- pmax(sv[ok] / count[ok], 0)
+  total[ok] <- pmax(ss[ok] / count[ok] - mu[ok]^2, 0)
+  between[ok] <- pmax(total[ok] - within[ok], 0)
 
-# cat(
-#   "Mean Delta DIC = ",
-#   round(
-#     mean(dic_nogp - dic_gp, na.rm = TRUE),
-#     2
-#   ),
-#   "\n"
-# )
+  list(
+    mean = mu,
+    sd = sqrt(total),
+    within_sd = sqrt(within),
+    between_sd = sqrt(between),
+    n = count
+  )
+}
 
-write.csv(
-  diagnostics,
-  "Code/Prevalence/Bovine BCT and PCR/Diagnostics ETH/Diagnostics.csv",
-  row.names = FALSE
-)
+run_latest_diagnostics <- function(cfg, cc) {
+  model_script <- find_model_script(cfg$model_script, cc)
+  cat("Loading current model helpers from:\n", model_script, "\n\n", sep = "")
 
+  # Production runs are written alongside the current model script.  Derive the
+  # search root from that absolute path rather than from getwd(), because VS Code
+  # may launch R with the working directory already inside this folder.
+  base <- dirname(normalizePath(model_script, mustWork = TRUE))
+  project_root <- find_project_root_for_data(base, cfg$data_path)
+  if (!grepl("^/", path.expand(cfg$output_dir)))
+    cfg$output_dir <- file.path(project_root, cfg$output_dir)
+  cfg$output_dir <- path.expand(cfg$output_dir)
 
+  load_model_helpers_without_running(model_script)
+  required_helpers <- c(
+    "fit_observations", "sample_joint_posterior", "predict_joint",
+    "effect_terms", "transform_model_covariates", "support_at_predictions",
+    "sample_component_rows", "make_iid_integrator", "nearest_distances_km",
+    "capture_inla_runtime", "fixed_prior_control", "aggregate_draw_counts"
+  )
+  missing_helpers <- required_helpers[
+    !vapply(required_helpers, exists, logical(1), mode = "function", inherits = TRUE)
+  ]
+  if (length(missing_helpers))
+    stop("The selected model script is not the current workflow; missing helpers: ",
+         paste(missing_helpers, collapse = ", "))
+  if (!exists("settings", inherits = TRUE) ||
+      !isTRUE(settings$covariate_degree == 2L) ||
+      !isTRUE(settings$use_location_iid))
+    stop("The selected model script is not configured for grouped quadratic covariates + location IID.")
 
+  production_index <- discover_production_runs(base, cfg$production_run_dir, cc)
+  draw_ids <- choose_diagnostic_draws(cfg, production_index)
+  selected_index <- production_index[match(draw_ids, production_index$draw), , drop = FALSE]
+  if (anyNA(selected_index$draw)) stop("Internal production-index matching failure.")
+
+  reference_run <- selected_index$root[1]
+  used_runs <- unique(selected_index$root)
+  assert_production_preparations_compatible(reference_run, used_runs, cc)
+
+  cat("Using compatible production run set:\n  ",
+      paste(basename(used_runs), collapse = "\n  "), "\n", sep = "")
+  cat("Diagnostic model draws: ", paste(draw_ids, collapse = ", "), "\n\n", sep = "")
+
+  v <- validate_production(reference_run, cc, cfg)
+  manifest <- v$manifest
+  prepared <- v$prepared
+  cfg <- v$cfg
+  on.exit(unlink(cfg$local_work_root, recursive = TRUE), add = TRUE)
+
+  cat(
+    "Verified current workflow:\n",
+    "  workflow: ", manifest$workflow_version, "\n",
+    "  quadratic degree: ", manifest$covariate_degree, "\n",
+    "  location IID: ", manifest$use_location_iid, "\n",
+    "  mesh cutoff: ", manifest$cutoff_m / 1000, " km\n",
+    "  max edges: ", paste(manifest$max_edge_m / 1000, collapse = ", "), " km\n",
+    "  offsets: ", paste(manifest$offset_m / 1000, collapse = ", "), " km\n",
+    "  SPDE range threshold: ", manifest$range_prior_m[1] / 1000, " km\n",
+    "  posterior samples/draw: ", cfg$posterior_samples, "\n\n",
+    sep = ""
+  )
+
+  data_path <- normalizePath(file.path(project_root, cfg$data_path), mustWork = TRUE)
+
+  if (!identical(unname(tools::md5sum(data_path)), manifest$input_md5))
+    stop("Input CSV differs from production run (MD5 mismatch).")
+
+  data_original <- read.csv(data_path)
+  data_original <- prepare_input_like_production(data_original, cc)
+
+  if (!is.numeric(data_original$sample_size) ||
+      any(!is.finite(data_original$sample_size)) ||
+      any(data_original$sample_size <= 0) ||
+      any(abs(data_original$sample_size - round(data_original$sample_size)) > 1e-8))
+    stop("sample_size must contain positive integer counts.")
+
+  if (max(draw_ids) + 7L > ncol(data_original))
+    stop("Requested model draw exceeds available adjusted-count columns.")
+
+  dir.create(cfg$output_dir, recursive = TRUE, showWarnings = FALSE)
+  checkpoint_dir <- file.path(cfg$output_dir, "Checkpoints_latest_workflow")
+  dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
+
+  signature <- list(
+    country = cc,
+    production_runs = sort(unique(normalizePath(selected_index$root))),
+    draw_source_map = selected_index[, c("draw", "root", "cov_file"), drop = FALSE],
+    model_script_md5 = unname(tools::md5sum(model_script)),
+    manifest_md5 = v$manifest_md5,
+    preparation_md5 = v$preparation_md5,
+    input_md5 = manifest$input_md5,
+    draw_ids = draw_ids,
+    posterior_samples = cfg$posterior_samples,
+    integration_tolerance = cfg$integration_tolerance,
+    seed = cfg$seed
+  )
+  signature_file <- file.path(checkpoint_dir, "diagnostic_signature.rds")
+  if (file.exists(signature_file)) {
+    if (!identical(readRDS(signature_file), signature))
+      stop("Existing diagnostic checkpoints use different settings. ",
+           "Use a new output_dir or intentionally remove Checkpoints_latest_workflow.")
+  } else {
+    atomic_save_rds_diag(signature, signature_file)
+  }
+
+  results <- vector("list", length(draw_ids))
+  names(results) <- as.character(draw_ids)
+
+  for (ii in seq_along(draw_ids)) {
+    draw <- draw_ids[ii]
+    cp <- file.path(checkpoint_dir, sprintf("diagnostic_draw_%04d.rds", draw))
+
+    if (isTRUE(cfg$resume) && file.exists(cp)) {
+      cat("Draw ", draw, ": loading diagnostic checkpoint.\n", sep = "")
+      results[[ii]] <- readRDS(cp)
+      next
+    }
+
+    cat("\n========================================\n")
+    cat("Diagnostic draw ", draw, " (", ii, "/", length(draw_ids), ")\n", sep = "")
+    cat("========================================\n")
+
+    cov_file <- selected_index$cov_file[match(draw, selected_index$draw)]
+    if (length(cov_file) != 1L || is.na(cov_file))
+      stop("Internal covariate-file index failure for draw ", draw)
+    if (!file.exists(cov_file))
+      stop("Missing selected-covariate file: ", cov_file)
+    tab <- read.csv(cov_file, stringsAsFactors = FALSE)
+    if (!"covariates" %in% names(tab))
+      stop("Missing covariates column: ", cov_file)
+    covariates <- trimws(as.character(tab$covariates))
+    covariates <- covariates[!is.na(covariates) & nzchar(covariates)]
+    if (anyDuplicated(covariates) ||
+        !all(covariates %in% prepared$candidate_covariates))
+      stop("Invalid selected parent covariates in ", cov_file)
+
+    counts <- aggregate_draw_counts(
+      data_original, draw + 7L, prepared$coordinate_mapping
+    )
+    y <- counts[prepared$kept_location_rows]
+    if (length(y) != nrow(prepared$observation_lonlat) ||
+        any(!is.finite(y)) || any(y < 0) ||
+        any(y > prepared$numtrials))
+      stop("Response/preparation mismatch for draw ", draw)
+
+    cat("Selected parent covariates: ",
+        if (length(covariates)) paste(covariates, collapse = " + ")
+        else "(intercept only)", "\n", sep = "")
+
+    # Full current spatial + IID model.
+    fit_sp <- fit_observations(prepared, y, covariates, cfg)
+    joint_sp <- sample_joint_posterior(fit_sp, prepared, covariates, cfg, draw)
+    obj <- list(
+      covariates = covariates,
+      response = y,
+      joint = joint_sp,
+      waic = fit_sp$waic$waic,
+      fixed = fit_sp$summary.fixed,
+      hyperparameters = fit_sp$summary.hyperpar,
+      spatial_nodes = fit_sp$summary.random$s,
+      observed_iid = if (prepared$use_location_iid)
+        fit_sp$summary.random$site_iid else NULL,
+      observed_prevalence =
+        fit_sp$summary.fitted.values[prepared$observation_index, , drop = FALSE]
+    )
+    pred_sp <- predict_joint(obj, prepared, cfg, draw)
+    comp <- summarise_components(prepared, covariates, joint_sp, cfg)
+
+    # Comparator: same selected quadratic fixed effects + same IID, no GP.
+    fit_ng <- fit_nospatial_iid(prepared, y, covariates, manifest, cfg)
+    joint_ng <- sample_nospatial_iid(fit_ng, prepared, covariates, cfg, draw)
+    pred_ng <- predict_nospatial_iid(prepared, covariates, joint_ng, cfg)
+
+    result <- list(
+      draw = draw,
+      covariates = covariates,
+
+      # Current publication target.
+      expected_mean = pred_sp$expected_prevalence$mean,
+      expected_var = pred_sp$expected_prevalence$sd^2,
+
+      # IID=0 latent surface.
+      surface_mean = pred_sp$surface_prevalence$mean,
+      surface_var = pred_sp$surface_prevalence$sd^2,
+      eta_mean = pred_sp$surface_linear_predictor$mean,
+      eta_var = pred_sp$surface_linear_predictor$sd^2,
+
+      # Decomposition of eta = X beta + w.
+      spatial_mean = comp$spatial_mean,
+      spatial_var = comp$spatial_var,
+      fixed_mean = comp$fixed_mean,
+      fixed_var = comp$fixed_var,
+
+      # No-spatial comparator, still fitted with the location IID.
+      nogp_expected_mean = pred_ng$expected_mean,
+      nogp_expected_var = pred_ng$expected_var,
+      nogp_surface_mean = pred_ng$surface_mean,
+      nogp_surface_var = pred_ng$surface_var,
+
+      waic_spatial_iid = fit_sp$waic$waic,
+      waic_nospatial_iid = fit_ng$waic$waic,
+      iid_sd_spatial_median = median(joint_sp$sigma_iid),
+      iid_sd_nospatial_median = median(joint_ng$sigma_iid),
+      integration_error_spatial =
+        pred_sp$integration_check$max_checked_probability_error[1],
+      integration_error_nospatial = pred_ng$integration_error
+    )
+
+    atomic_save_rds_diag(result, cp)
+    results[[ii]] <- result
+
+    cat(
+      "WAIC spatial+IID = ", round(result$waic_spatial_iid, 2),
+      "; no-spatial+IID = ", round(result$waic_nospatial_iid, 2),
+      "; Delta = ",
+      round(result$waic_nospatial_iid - result$waic_spatial_iid, 2),
+      "\n", sep = ""
+    )
+
+    rm(fit_sp, joint_sp, obj, pred_sp, comp,
+       fit_ng, joint_ng, pred_ng, result)
+    gc(verbose = FALSE)
+  }
+
+  expected <- pool_component(results, "expected_mean", "expected_var")
+  surface <- pool_component(results, "surface_mean", "surface_var")
+  eta <- pool_component(results, "eta_mean", "eta_var")
+  spatial <- pool_component(results, "spatial_mean", "spatial_var")
+  fixed <- pool_component(results, "fixed_mean", "fixed_var")
+  nogp_expected <- pool_component(
+    results, "nogp_expected_mean", "nogp_expected_var"
+  )
+  nogp_surface <- pool_component(
+    results, "nogp_surface_mean", "nogp_surface_var"
+  )
+
+  if (!is.null(prepared$nearest_observation_km)) {
+    distance_km <- prepared$nearest_observation_km
+  } else {
+    distance_km <- nearest_distances_km(
+      prepared$prediction_m, prepared$observation_m
+    )
+  }
+
+  diagnostics <- data.frame(
+    lon = prepared$prediction_lonlat[, 1],
+    lat = prepared$prediction_lonlat[, 2],
+
+    # Main current expected-prevalence target.
+    prevalence_mean = expected$mean,
+    prevalence_sd = expected$sd,
+    prevalence_within_sd = expected$within_sd,
+    prevalence_between_draw_sd = expected$between_sd,
+
+    # IID=0 surface, directly relevant to the GP-regression-to-zero comment.
+    surface_prevalence_mean = surface$mean,
+    surface_prevalence_sd = surface$sd,
+    surface_prevalence_within_sd = surface$within_sd,
+    surface_prevalence_between_draw_sd = surface$between_sd,
+
+    # Latent scale.
+    eta_mean = eta$mean,
+    eta_sd = eta$sd,
+    eta_within_sd = eta$within_sd,
+    eta_between_draw_sd = eta$between_sd,
+
+    spatial_mean = spatial$mean,
+    spatial_sd = spatial$sd,
+    spatial_within_sd = spatial$within_sd,
+    spatial_between_draw_sd = spatial$between_sd,
+
+    fixed_effect_mean = fixed$mean,
+    fixed_effect_sd = fixed$sd,
+    fixed_effect_within_sd = fixed$within_sd,
+    fixed_effect_between_draw_sd = fixed$between_sd,
+
+    # Comparator preserving fixed effects + location IID but removing GP.
+    prevalence_no_gp = nogp_expected$mean,
+    prevalence_no_gp_sd = nogp_expected$sd,
+    surface_prevalence_no_gp = nogp_surface$mean,
+    surface_prevalence_no_gp_sd = nogp_surface$sd,
+
+    dist_to_data_km = distance_km,
+    n_draws_prevalence = expected$n,
+    n_draws_surface = surface$n,
+    n_draws_spatial = spatial$n,
+
+    spatial_abs_mean_over_sd = ifelse(
+      is.finite(spatial$sd) & spatial$sd > 0,
+      abs(spatial$mean) / spatial$sd,
+      NA_real_
+    )
+  )
+
+  model_comparison <- do.call(rbind, lapply(results, function(z)
+    data.frame(
+      draw = z$draw,
+      selected_parent_covariates = paste(z$covariates, collapse = " + "),
+      waic_spatial_iid = z$waic_spatial_iid,
+      waic_nospatial_iid = z$waic_nospatial_iid,
+      delta_waic_nospatial_minus_spatial =
+        z$waic_nospatial_iid - z$waic_spatial_iid,
+      iid_sd_spatial_median = z$iid_sd_spatial_median,
+      iid_sd_nospatial_median = z$iid_sd_nospatial_median,
+      integration_error_spatial = z$integration_error_spatial,
+      integration_error_nospatial = z$integration_error_nospatial,
+      stringsAsFactors = FALSE
+    )
+  ))
+
+  per_draw_summary <- do.call(rbind, lapply(results, function(z) {
+    ok <- is.finite(z$expected_mean)
+    data.frame(
+      draw = z$draw,
+      valid_grid_cells = sum(ok),
+      mean_expected_prevalence = mean(z$expected_mean[ok]),
+      mean_surface_prevalence = mean(z$surface_mean[ok]),
+      median_expected_posterior_sd =
+        median(sqrt(z$expected_var[ok])),
+      median_surface_posterior_sd =
+        median(sqrt(z$surface_var[ok])),
+      mean_spatial_field = mean(z$spatial_mean, na.rm = TRUE),
+      sd_spatial_field_across_grid = sd(z$spatial_mean, na.rm = TRUE),
+      stringsAsFactors = FALSE
+    )
+  }))
+
+  atomic_write_csv_diag(
+    diagnostics, file.path(cfg$output_dir, "Diagnostics.csv")
+  )
+  atomic_write_csv_diag(
+    model_comparison, file.path(cfg$output_dir, "Model_comparison.csv")
+  )
+  atomic_write_csv_diag(
+    per_draw_summary, file.path(cfg$output_dir, "Per_draw_summary.csv")
+  )
+  atomic_save_rds_diag(
+    list(
+      diagnostic_settings = cfg,
+      production_runs = unique(selected_index$root),
+      production_manifest = manifest,
+      signature = signature
+    ),
+    file.path(cfg$output_dir, "Diagnostics_settings_used.rds")
+  )
+
+  cat("\n========================================\n")
+  cat("DIAGNOSTICS COMPLETE\n")
+  cat("========================================\n")
+  cat("Mean Delta WAIC (no-spatial+IID - spatial+IID): ",
+      round(mean(model_comparison$delta_waic_nospatial_minus_spatial), 2),
+      "\n", sep = "")
+  cat("Outputs written to: ", cfg$output_dir, "\n", sep = "")
+
+  invisible(cfg$output_dir)
+}
+
+run_latest_diagnostics(diagnostic_settings, country_code)

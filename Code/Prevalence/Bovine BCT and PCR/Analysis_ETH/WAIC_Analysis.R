@@ -18,7 +18,7 @@ cat("Analyzing WAIC increase data for", country_name, "...\n")
 #===============================================================================
 
 # Get list of all WAIC increase files
-waic_files <- list.files(paste0("Code/Prevalence/Bovine BCT and PCR/WAIC_increase_", country_code,"_better_mesh/"), 
+waic_files <- list.files(paste0("Code/Prevalence/Bovine BCT and PCR/WAIC_increase_", country_code,"/"), 
                          pattern = "WAIC_increase_model_.*\\.csv$", 
                          full.names = TRUE)
 
@@ -284,7 +284,7 @@ p5 <- ggplot(rank_consistency, aes(x = mean_rank, y = rank_consistency)) +
     plot.background = element_rect(fill = "white", color = NA),
     panel.background = element_rect(fill = "white", color = NA)
   ) +
-  scale_x_reverse(limits = c(8, 0)) +
+  scale_x_reverse(limits = c(15, 0)) +
   labs(
     title = paste("Ranking consistency vs average rank -", country_name),
     x = "Average rank (lower = more important)",

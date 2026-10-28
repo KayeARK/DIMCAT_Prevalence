@@ -1,0 +1,7 @@
+"figure","caption"
+"01_Coverage_selected_model","Dashed line: nominal coverage. Counts show observations inside intervals / total observations.
+Draws: 1. Intervals predict corrected survey observations; they do not validate mapped mean-prevalence CrIs.
+Repeated draws reuse the same sites/cells. Fold dots are descriptive, not confidence intervals."
+"02_Ordered_predictive_intervals","Blue line: posterior mean. Black dots: corrected observations inside the 95% interval; orange triangles: outside.
+Bands are pointwise predictive intervals. Ordering is not geographical and does not demonstrate predictive discrimination.
+Cell means give sampled sites equal weight; pp: percentage points. Draws: 1. Intervals predict corrected survey observations; they do not validate mapped mean-prevalence CrIs."

@@ -1,0 +1,6 @@
+"fold","train_sites","heldout_sites","occupied_heldout_blocks","eligible_blocks","eligible_test_sites","buffered_training_sites_excluded","minimum_test_to_training_km","median_test_to_training_km"
+1,131,70,17,10,62,9,27.1060467629382,98.171815606222
+2,184,25,4,4,25,1,37.9599457045452,82.4728141268628
+3,168,41,3,2,40,1,25.7536973047608,49.1509532050858
+4,142,60,19,9,48,8,27.1060467629382,74.9355554129332
+5,196,14,7,2,7,0,39.3448522778992,72.4008063056291

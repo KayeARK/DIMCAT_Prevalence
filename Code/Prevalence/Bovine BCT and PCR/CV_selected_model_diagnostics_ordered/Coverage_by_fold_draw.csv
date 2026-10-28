@@ -1,0 +1,61 @@
+"analysis","country","target","model","averaging","nominal","draw","fold","n_evaluations","n_distinct_units","n_draws","covered","below","above","coverage","mean_width_pp","mean_interval_score_pp"
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.8,1,1,7,7,1,5,0,2,0.714285714285714,25.897953398198,53.8082588903753
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.8,1,2,8,8,1,5,0,3,0.625,34.5749782421998,52.5667891511305
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.8,1,3,3,3,1,3,0,0,1,26.6140391088384,26.6140391088384
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.8,1,4,6,6,1,6,0,0,1,26.5407169946693,26.5407169946693
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.8,1,5,8,8,1,7,1,0,0.875,34.6301545777291,36.0543240046086
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.95,1,1,7,7,1,6,0,1,0.857142857142857,39.1050467498774,86.6098376142499
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.95,1,2,8,8,1,8,0,0,1,50.5717427451529,50.5717427451529
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.95,1,3,3,3,1,3,0,0,1,40.8794829983335,40.8794829983335
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.95,1,4,6,6,1,6,0,0,1,39.8333463140835,39.8333463140835
+"ETH_100","Ethiopia","100 km means","selected_spatial_iid","equal_sites",0.95,1,5,8,8,1,8,0,0,1,51.5232931362157,51.5232931362157
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.8,1,1,2,2,1,1,0,1,0.5,16.816940830729,29.671431165596
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.8,1,2,3,3,1,3,0,0,1,25.6403609942641,25.6403609942641
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.8,1,3,2,2,1,2,0,0,1,22.0458806923134,22.0458806923134
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.8,1,4,2,2,1,2,0,0,1,17.0246976576295,17.0246976576295
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.8,1,5,2,2,1,2,0,0,1,21.1772587381229,21.1772587381229
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.95,1,1,2,2,1,2,0,0,1,25.5503599349934,25.5503599349934
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.95,1,2,3,3,1,3,0,0,1,37.8941039403662,37.8941039403662
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.95,1,3,2,2,1,2,0,0,1,34.004831607473,34.004831607473
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.95,1,4,2,2,1,2,0,0,1,26.3918488779388,26.3918488779388
+"ETH_200","Ethiopia","200 km means","selected_spatial_iid","equal_sites",0.95,1,5,2,2,1,2,0,0,1,33.0735822257845,33.0735822257845
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.8,1,1,139,139,1,125,11,3,0.899280575539568,72.2306739519365,75.8975169258742
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.8,1,2,139,139,1,114,16,9,0.820143884892086,70.279112324892,84.9675254387871
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.8,1,3,139,139,1,107,9,23,0.76978417266187,66.5431182817574,95.3902328244022
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.8,1,4,139,139,1,125,1,13,0.899280575539568,65.5066931905853,80.5119578936196
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.8,1,5,139,139,1,98,17,24,0.705035971223022,66.031349791834,94.1761287718349
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.95,1,1,139,139,1,137,2,0,0.985611510791367,90.1335890259502,90.6611669636001
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.95,1,2,139,139,1,130,5,4,0.935251798561151,88.7948675647056,96.4385018526686
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.95,1,3,139,139,1,123,5,11,0.884892086330935,86.0070680466222,111.799495348212
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.95,1,4,139,139,1,135,0,4,0.971223021582734,86.2476657504812,99.1422599513082
+"ETH_site","Ethiopia","Survey sites","selected_spatial_iid","equal_sites",0.95,1,5,139,139,1,120,9,10,0.863309352517986,85.3857450612154,104.088083980723
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.8,1,1,10,10,1,8,2,0,0.8,47.689397473279,58.1269735909216
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.8,1,2,4,4,1,4,0,0,1,38.3362839762212,38.3362839762212
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.8,1,3,2,2,1,2,0,0,1,41.9533772462767,41.9533772462767
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.8,1,4,9,9,1,7,0,2,0.777777777777778,36.1965075116043,48.3789987393172
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.8,1,5,2,2,1,2,0,0,1,49.5057611024331,49.5057611024331
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.95,1,1,10,10,1,9,1,0,0.9,66.8880894004549,72.5405723867766
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.95,1,2,4,4,1,4,0,0,1,56.2823015626415,56.2823015626415
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.95,1,3,2,2,1,2,0,0,1,60.4316391176973,60.4316391176973
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.95,1,4,9,9,1,9,0,0,1,53.4940077444303,53.4940077444303
+"NGA_100","Nigeria","100 km means","selected_spatial_iid","equal_sites",0.95,1,5,2,2,1,2,0,0,1,72.3277298138937,72.3277298138937
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.8,1,1,6,6,1,5,1,0,0.833333333333333,40.0398313414671,43.1732230715841
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.8,1,2,1,1,1,1,0,0,1,22.227785866461,22.227785866461
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.8,1,3,2,2,1,2,0,0,1,41.6112279329703,41.6112279329703
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.8,1,4,7,7,1,4,0,3,0.571428571428571,31.8145868648605,62.6768859822794
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.8,1,5,2,2,1,2,0,0,1,38.7835519537879,38.7835519537879
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.95,1,1,6,6,1,6,0,0,1,56.7333760735739,56.7333760735739
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.95,1,2,1,1,1,1,0,0,1,33.6221487245215,33.6221487245215
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.95,1,3,2,2,1,2,0,0,1,59.8086686749381,59.8086686749381
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.95,1,4,7,7,1,7,0,0,1,47.215448944943,47.215448944943
+"NGA_200","Nigeria","200 km means","selected_spatial_iid","equal_sites",0.95,1,5,2,2,1,2,0,0,1,56.4310323297872,56.4310323297872
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.8,1,1,34,34,1,29,3,2,0.852941176470588,68.3130274084367,78.6543605923918
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.8,1,2,37,37,1,31,2,4,0.837837837837838,65.3501611461255,94.0997318311801
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.8,1,3,61,61,1,58,0,3,0.950819672131147,70.80488611107,82.748148112842
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.8,1,4,50,50,1,39,7,4,0.78,73.3166841531776,97.3537887694978
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.8,1,5,28,28,1,18,3,7,0.642857142857143,59.0124904863708,105.172021428755
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.95,1,1,34,34,1,33,0,1,0.970588235294118,88.4639653455632,99.4443575024259
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.95,1,2,37,37,1,36,0,1,0.972972972972973,86.0742370411186,107.69585866274
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.95,1,3,61,61,1,59,0,2,0.967213114754098,91.3365226601193,98.0173026518215
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.95,1,4,50,50,1,46,1,3,0.92,91.3917627415856,108.991762741586
+"NGA_site","Nigeria","Survey sites","selected_spatial_iid","equal_sites",0.95,1,5,28,28,1,25,1,2,0.892857142857143,80.8692933864176,106.318382112817
